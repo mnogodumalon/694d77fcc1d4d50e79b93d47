@@ -570,15 +570,7 @@ export default function Dashboard() {
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
-              <div className="flex items-center justify-between">
-                <SheetTitle className="font-display text-xl font-bold">PR eintragen</SheetTitle>
-                <button
-                  onClick={() => setSheetOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-2)] transition-colors press-feedback"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <SheetTitle className="font-display text-xl font-bold">PR eintragen</SheetTitle>
               <p className="text-sm text-[var(--text-muted)] mt-1">in kg</p>
             </SheetHeader>
 
@@ -755,7 +747,7 @@ export default function Dashboard() {
                   isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
                 }`}
               >
-                <tab.icon className={`w-6 h-6 ${isActive ? 'glow-accent' : ''}`} />
+                <tab.icon className="w-6 h-6" />
                 <span className={`text-xs font-medium ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
               </button>
             );

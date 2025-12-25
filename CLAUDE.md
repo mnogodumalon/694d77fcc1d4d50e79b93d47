@@ -2,7 +2,7 @@
 
 ## 🎯 Ziel
 
-Erstelle ein **vollständiges, funktionsfähiges Dashboard** für Living Apps Backend basierend auf den bereitgestellten App-Metadaten.
+Erstelle ein **vollständiges, funktionsfähiges frontend** für Living Apps Backend basierend auf den bereitgestellten App-Metadaten.
 
 
 **Technologie-Stack:**
@@ -11,9 +11,6 @@ Erstelle ein **vollständiges, funktionsfähiges Dashboard** für Living Apps Ba
 - 🔌 **Living Apps REST API** (direkter fetch)
 - 📅 **date-fns** für Datumsformatierung
 - 📊 **recharts** für Visualisierungen
-
-**WICHTIG:**
-- NUR Dashboard generieren (keine CRUD-Seiten, kein Layout, kein Router)
 
 ---
 
