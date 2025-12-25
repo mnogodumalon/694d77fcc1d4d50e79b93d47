@@ -563,10 +563,12 @@ export default function Dashboard() {
   // PR Add Sheet
   function PRAddSheet() {
     return (
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet modal={false} open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="bottom"
           className="h-[85dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
@@ -739,6 +741,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
           {tabs.map((tab) => {
             const isActive = view === tab.id;
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
@@ -747,7 +750,7 @@ export default function Dashboard() {
                   isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
                 }`}
               >
-                <tab.icon className="w-6 h-6" />
+                <Icon className="w-6 h-6" style={{ strokeWidth: isActive ? 2.5 : 2 }} />
                 <span className={`text-xs font-medium ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
               </button>
             );

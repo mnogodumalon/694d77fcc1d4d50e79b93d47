@@ -65,12 +65,12 @@
   --surface-3: #252530;
 
   --text: #e8e8f0;
-  --text-muted: #8a8a98;
-  --text-dim: #626270;
+  --text-muted: #a0a0b0;
+  --text-dim: #727280;
 
-  --accent: #ff5c7c; /* Energetic Pink/Red - heller für besseren Kontrast */
-  --accent-hover: #ff7a94;
-  --accent-glow: rgba(255, 92, 124, 0.3);
+  --accent: #ff8fa8; /* Energetic Pink/Red - VIEL heller für perfekten Kontrast */
+  --accent-hover: #ffa8bc;
+  --accent-glow: rgba(255, 143, 168, 0.35);
 
   --border: #2a2a35;
   --border-dim: #1a1a20;
