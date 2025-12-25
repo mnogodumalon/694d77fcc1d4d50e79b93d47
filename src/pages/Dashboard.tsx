@@ -563,12 +563,10 @@ export default function Dashboard() {
   // PR Add Sheet
   function PRAddSheet() {
     return (
-      <Sheet modal={false} open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="bottom"
           className="h-[85dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">

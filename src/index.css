@@ -68,7 +68,8 @@
   --text-muted: #a0a0b0;
   --text-dim: #727280;
 
-  --accent: #ff8fa8; /* Energetic Pink/Red - VIEL heller für perfekten Kontrast */
+  /* App Accent Color - Energetic Pink */
+  --accent: #ff8fa8;
   --accent-hover: #ffa8bc;
   --accent-glow: rgba(255, 143, 168, 0.35);
 
@@ -80,17 +81,15 @@
   --card-foreground: var(--text);
   --popover: var(--surface-3);
   --popover-foreground: var(--text);
-  --primary: var(--accent);
+  --primary: #ff8fa8;
   --primary-foreground: #ffffff;
   --secondary: var(--surface-2);
   --secondary-foreground: var(--text);
   --muted: var(--surface-1);
   --muted-foreground: var(--text-muted);
-  --accent: var(--surface-2);
-  --accent-foreground: var(--text);
   --destructive: #ef4444;
   --input: var(--border);
-  --ring: var(--accent);
+  --ring: #ff8fa8;
 }
 
 /* === ANIMATIONS === */
