@@ -560,9 +560,28 @@ export default function Dashboard() {
     );
   }
 
-  // PR Add Sheet
-  function PRAddSheet() {
+  // === RENDER ===
+  if (loading) {
     return (
+      <div className="phone-frame flex items-center justify-center min-h-screen bg-[var(--background)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-[var(--text-muted)]">Lädt...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="phone-frame flex flex-col min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <Toaster position="top-center" />
+      <TopAppBar />
+
+      {view === 'home' && <HomeView />}
+      {view === 'exercise-detail' && <ExerciseDetailView />}
+      {view === 'prs-feed' && <PRsFeedView />}
+
+      {/* PR Add Sheet - Inline statt Funktion um Re-Mount zu vermeiden */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="bottom"
@@ -724,63 +743,30 @@ export default function Dashboard() {
           </div>
         </SheetContent>
       </Sheet>
-    );
-  }
 
-  // Bottom Tab Bar
-  function BottomTabBar() {
-    const tabs = [
-      { id: 'home' as ViewType, label: 'Home', icon: Home },
-      { id: 'prs-feed' as ViewType, label: 'PRs', icon: BarChart3 },
-    ];
-
-    return (
+      {/* Bottom Tab Bar - Inline */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-dim)] bg-[var(--surface-2)]/95 backdrop-blur-lg">
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
-          {tabs.map((tab) => {
-            const isActive = view === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setView(tab.id)}
-                className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
-                  isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-                }`}
-              >
-                <Icon className="w-6 h-6" style={{ strokeWidth: isActive ? 2.5 : 2 }} />
-                <span className={`text-xs font-medium ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
-              </button>
-            );
-          })}
+          <button
+            onClick={() => setView('home')}
+            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
+              view === 'home' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <Home className="w-6 h-6" style={{ strokeWidth: view === 'home' ? 2.5 : 2 }} />
+            <span className={`text-xs font-medium ${view === 'home' ? 'font-bold' : ''}`}>Home</span>
+          </button>
+          <button
+            onClick={() => setView('prs-feed')}
+            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
+              view === 'prs-feed' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <BarChart3 className="w-6 h-6" style={{ strokeWidth: view === 'prs-feed' ? 2.5 : 2 }} />
+            <span className={`text-xs font-medium ${view === 'prs-feed' ? 'font-bold' : ''}`}>PRs</span>
+          </button>
         </div>
       </div>
-    );
-  }
-
-  // === RENDER ===
-  if (loading) {
-    return (
-      <div className="phone-frame flex items-center justify-center min-h-screen bg-[var(--background)]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-[var(--text-muted)]">Lädt...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="phone-frame flex flex-col min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <Toaster position="top-center" />
-      <TopAppBar />
-
-      {view === 'home' && <HomeView />}
-      {view === 'exercise-detail' && <ExerciseDetailView />}
-      {view === 'prs-feed' && <PRsFeedView />}
-
-      <PRAddSheet />
-      <BottomTabBar />
     </div>
   );
 }
