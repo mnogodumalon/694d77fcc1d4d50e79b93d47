@@ -1,0 +1,92 @@
+{
+  "appgroup_id": "694d77fcc1d4d50e79b93d47",
+  "appgroup_name": "Fitness PR Tracker",
+  "apps": {
+    "uebungen": {
+      "app_id": "694d77f2ef696e8bff21287d",
+      "name": "\u00dcbungen",
+      "controls": {
+        "name": {
+          "identifier": "name",
+          "label": "\u00dcbungsname",
+          "type": "string",
+          "subtype": "text",
+          "fulltype": "string/text",
+          "description": "A string value not longer than 4000 characters (or `null`)."
+        },
+        "created_at": {
+          "identifier": "created_at",
+          "label": "Erstellt am",
+          "type": "date",
+          "subtype": "date",
+          "fulltype": "date/date",
+          "description": "A calendar date consisting of year, month and day. (Or `null`/`None`)\n\nThe field value will be a string in the format `<YYYY>-<MM>-<DD>` or `null`.\n\nFor example: `1642-12-25`."
+        }
+      }
+    },
+    "pr_eintraege": {
+      "app_id": "694d77f4b641f5b879e4e810",
+      "name": "PR-Eintr\u00e4ge",
+      "controls": {
+        "exercise_id": {
+          "identifier": "exercise_id",
+          "label": "\u00dcbung",
+          "type": "applookup",
+          "subtype": "select",
+          "fulltype": "applookup/select",
+          "description": "A reference to another LivingApp record from a target lookup app (or `null`).\n\nThe field value will be a valid record URL in the form `https://<hostname>/rest/apps/<app-id>/records/<record-id>` or `null`.",
+          "lookup_app": "https://my.living-apps.de/rest/apps/694d77f2ef696e8bff21287d"
+        },
+        "date": {
+          "identifier": "date",
+          "label": "Datum",
+          "type": "date",
+          "subtype": "date",
+          "fulltype": "date/date",
+          "description": "A calendar date consisting of year, month and day. (Or `null`/`None`)\n\nThe field value will be a string in the format `<YYYY>-<MM>-<DD>` or `null`.\n\nFor example: `1642-12-25`."
+        },
+        "weight_kg": {
+          "identifier": "weight_kg",
+          "label": "Gewicht (kg)",
+          "type": "number",
+          "subtype": null,
+          "fulltype": "number",
+          "description": "A decimal number value (or `null`).",
+          "precision": null
+        },
+        "reps": {
+          "identifier": "reps",
+          "label": "Wiederholungen",
+          "type": "number",
+          "subtype": null,
+          "fulltype": "number",
+          "description": "A decimal number value (or `null`).",
+          "precision": null
+        },
+        "sets": {
+          "identifier": "sets",
+          "label": "S\u00e4tze",
+          "type": "number",
+          "subtype": null,
+          "fulltype": "number",
+          "description": "A decimal number value (or `null`).",
+          "precision": null
+        },
+        "note": {
+          "identifier": "note",
+          "label": "Notiz",
+          "type": "string",
+          "subtype": "textarea",
+          "fulltype": "string/textarea",
+          "description": "A string value that can contain multiple lines of text (or `null`)."
+        }
+      }
+    }
+  },
+  "metadata": {
+    "apps_list": [
+      "\u00dcbungen",
+      "PR-Eintr\u00e4ge"
+    ]
+  }
+}
