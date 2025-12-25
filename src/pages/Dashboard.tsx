@@ -1,635 +1,793 @@
-import { useEffect, useState } from 'react';
-import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
+import { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
+import {
+  TrendingUp,
+  Plus,
+  Search,
+  Dumbbell,
+  Calendar,
+  ChevronRight,
+  X,
+  Minus,
+  Activity,
+  Trophy,
+  History,
+  Home,
+  BarChart3,
+  StickyNote,
+} from 'lucide-react';
 import type { Uebungen, PrEintraege } from '@/types/app';
 import { APP_IDS } from '@/types/app';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import {
-  TrendingUp,
-  Dumbbell,
-  Trophy,
-  Calendar,
-  PlusCircle,
-  Flame,
-  Target,
-  ArrowUpRight,
-} from 'lucide-react';
-import { format, differenceInDays, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
+import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 
-interface DashboardStats {
-  totalUebungen: number;
-  totalPRs: number;
-  lastPRDate: string | null;
-  trainingStreak: number;
+// === TYPES ===
+type ViewType = 'home' | 'exercise-detail' | 'prs-feed';
+
+interface ExerciseWithPRs extends Uebungen {
+  prs: PrEintraege[];
+  bestKg?: number;
+  bestReps?: number;
+  lastPR?: PrEintraege;
 }
 
-interface PRHistoryData {
+interface PRFormData {
+  exercise_id: string;
   date: string;
-  count: number;
+  weight_kg: string;
+  reps: string;
+  sets: string;
+  note: string;
 }
 
-interface TopUebung {
-  name: string;
-  prCount: number;
-  lastPR: {
-    weight: number;
-    reps: number;
-    date: string;
-  } | null;
-}
-
+// === MAIN COMPONENT ===
 export default function Dashboard() {
+  // State Management
+  const [view, setView] = useState<ViewType>('home');
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseWithPRs | null>(null);
+  const [exercises, setExercises] = useState<ExerciseWithPRs[]>([]);
+  const [recentPRs, setRecentPRs] = useState<Array<PrEintraege & { exerciseName: string }>>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [uebungen, setUebungen] = useState<Uebungen[]>([]);
-  const [prEintraege, setPrEintraege] = useState<PrEintraege[]>([]);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalUebungen: 0,
-    totalPRs: 0,
-    lastPRDate: null,
-    trainingStreak: 0,
-  });
-  const [prHistory, setPRHistory] = useState<PRHistoryData[]>([]);
-  const [topUebungen, setTopUebungen] = useState<TopUebung[]>([]);
-  const [recentPRs, setRecentPRs] = useState<(PrEintraege & { uebungName: string })[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  // Dialog State für neuen PR-Eintrag
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PRFormData>({
     exercise_id: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     weight_kg: '',
     reps: '',
-    sets: '',
+    sets: '1',
     note: '',
   });
 
-  // Daten laden
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-      const [uebungenData, prEintraegeData] = await Promise.all([
-        LivingAppsService.getUebungen(),
-        LivingAppsService.getPrEintraege(),
-      ]);
-
-      setUebungen(uebungenData);
-      setPrEintraege(prEintraegeData);
-
-      // Stats berechnen
-      calculateStats(uebungenData, prEintraegeData);
-      calculatePRHistory(prEintraegeData);
-      calculateTopUebungen(uebungenData, prEintraegeData);
-      calculateRecentPRs(uebungenData, prEintraegeData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Daten');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Data Fetching & Processing
   useEffect(() => {
     loadData();
   }, []);
 
-  // Stats berechnen
-  const calculateStats = (uebungenData: Uebungen[], prEintraegeData: PrEintraege[]) => {
-    const totalUebungen = uebungenData.length;
-    const totalPRs = prEintraegeData.length;
+  async function loadData() {
+    try {
+      setLoading(true);
+      const [uebungen, prEintraege] = await Promise.all([
+        LivingAppsService.getUebungen(),
+        LivingAppsService.getPrEintraege(),
+      ]);
 
-    // Letztes PR-Datum
-    const sortedByDate = [...prEintraegeData]
-      .filter((pr) => pr.fields.date)
-      .sort((a, b) => {
-        const dateA = a.fields.date || '';
-        const dateB = b.fields.date || '';
-        return dateB.localeCompare(dateA);
-      });
-    const lastPRDate = sortedByDate.length > 0 ? sortedByDate[0].fields.date || null : null;
+      // Group PRs by exercise
+      const exercisesWithPRs: ExerciseWithPRs[] = uebungen.map((ex) => {
+        const exercisePRs = prEintraege.filter((pr) => {
+          const exId = extractRecordId(pr.fields.exercise_id);
+          return exId === ex.record_id;
+        }).sort((a, b) => {
+          const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
+          const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
+          return dateB - dateA; // Newest first
+        });
 
-    // Training Streak (Tage seit letztem PR)
-    let trainingStreak = 0;
-    if (lastPRDate) {
-      try {
-        const daysSince = differenceInDays(new Date(), parseISO(lastPRDate));
-        trainingStreak = daysSince;
-      } catch {
-        trainingStreak = 0;
-      }
-    }
+        const bestKg = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.weight_kg || 0), 0);
+        const bestReps = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.reps || 0), 0);
+        const lastPR = exercisePRs[0];
 
-    setStats({
-      totalUebungen,
-      totalPRs,
-      lastPRDate,
-      trainingStreak,
-    });
-  };
-
-  // PR-Historie berechnen (letzte 30 Tage)
-  const calculatePRHistory = (prEintraegeData: PrEintraege[]) => {
-    const last30Days: Record<string, number> = {};
-
-    // Initialisiere letzte 30 Tage
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = format(date, 'yyyy-MM-dd');
-      last30Days[dateStr] = 0;
-    }
-
-    // Zähle PRs pro Tag
-    prEintraegeData.forEach((pr) => {
-      if (pr.fields.date) {
-        const dateStr = pr.fields.date.split('T')[0];
-        if (last30Days[dateStr] !== undefined) {
-          last30Days[dateStr]++;
-        }
-      }
-    });
-
-    const historyData = Object.entries(last30Days).map(([date, count]) => ({
-      date: format(parseISO(date), 'dd.MM', { locale: de }),
-      count,
-    }));
-
-    setPRHistory(historyData);
-  };
-
-  // Top Übungen berechnen (nach PR-Anzahl)
-  const calculateTopUebungen = (uebungenData: Uebungen[], prEintraegeData: PrEintraege[]) => {
-    const uebungStats: Record<
-      string,
-      {
-        name: string;
-        prCount: number;
-        lastPR: { weight: number; reps: number; date: string } | null;
-      }
-    > = {};
-
-    // Initialisiere alle Übungen
-    uebungenData.forEach((uebung) => {
-      uebungStats[uebung.record_id] = {
-        name: uebung.fields.name || 'Unbenannte Übung',
-        prCount: 0,
-        lastPR: null,
-      };
-    });
-
-    // Zähle PRs pro Übung
-    prEintraegeData.forEach((pr) => {
-      const exerciseId = extractRecordId(pr.fields.exercise_id);
-      if (!exerciseId) return;
-
-      if (uebungStats[exerciseId]) {
-        uebungStats[exerciseId].prCount++;
-
-        // Letzten PR speichern
-        if (pr.fields.date && pr.fields.weight_kg && pr.fields.reps) {
-          const currentLastPR = uebungStats[exerciseId].lastPR;
-          if (!currentLastPR || pr.fields.date > currentLastPR.date) {
-            uebungStats[exerciseId].lastPR = {
-              weight: pr.fields.weight_kg,
-              reps: pr.fields.reps,
-              date: pr.fields.date,
-            };
-          }
-        }
-      }
-    });
-
-    const topData = Object.values(uebungStats)
-      .sort((a, b) => b.prCount - a.prCount)
-      .slice(0, 5);
-
-    setTopUebungen(topData);
-  };
-
-  // Neueste PRs berechnen
-  const calculateRecentPRs = (uebungenData: Uebungen[], prEintraegeData: PrEintraege[]) => {
-    const uebungMap = new Map(uebungenData.map((u) => [u.record_id, u.fields.name || 'Unbenannte Übung']));
-
-    const recent = [...prEintraegeData]
-      .filter((pr) => pr.fields.date)
-      .sort((a, b) => {
-        const dateA = a.fields.date || '';
-        const dateB = b.fields.date || '';
-        return dateB.localeCompare(dateA);
-      })
-      .slice(0, 5)
-      .map((pr) => {
-        const exerciseId = extractRecordId(pr.fields.exercise_id);
-        const uebungName = exerciseId ? uebungMap.get(exerciseId) || 'Unbekannt' : 'Unbekannt';
         return {
-          ...pr,
-          uebungName,
+          ...ex,
+          prs: exercisePRs,
+          bestKg: bestKg > 0 ? bestKg : undefined,
+          bestReps: bestReps > 0 ? bestReps : undefined,
+          lastPR,
         };
       });
 
-    setRecentPRs(recent);
-  };
+      setExercises(exercisesWithPRs);
 
-  // Neuen PR-Eintrag erstellen
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.exercise_id || !formData.date || !formData.weight_kg || !formData.reps) {
-      alert('Bitte fülle alle Pflichtfelder aus');
+      // Recent PRs for Hero Carousel (last 10 PRs across all exercises)
+      const recent = prEintraege
+        .sort((a, b) => {
+          const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
+          const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
+          return dateB - dateA;
+        })
+        .slice(0, 10)
+        .map((pr) => {
+          const exId = extractRecordId(pr.fields.exercise_id);
+          const exercise = uebungen.find((ex) => ex.record_id === exId);
+          return {
+            ...pr,
+            exerciseName: exercise?.fields.name || 'Unbekannte Übung',
+          };
+        });
+
+      setRecentPRs(recent);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Fehler beim Laden der Daten');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Handlers
+  function handleExerciseClick(exercise: ExerciseWithPRs) {
+    setSelectedExercise(exercise);
+    setView('exercise-detail');
+  }
+
+  function openPRSheet(exerciseId?: string) {
+    setFormData({
+      exercise_id: exerciseId || '',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      weight_kg: '',
+      reps: '',
+      sets: '1',
+      note: '',
+    });
+    setSheetOpen(true);
+  }
+
+  async function handleSubmitPR() {
+    if (!formData.exercise_id || !formData.weight_kg || !formData.reps) {
+      toast.error('Bitte fülle alle Pflichtfelder aus');
       return;
     }
 
     try {
-      setSubmitting(true);
-
-      const newPR: PrEintraege['fields'] = {
+      const data: PrEintraege['fields'] = {
         exercise_id: createRecordUrl(APP_IDS.UEBUNGEN, formData.exercise_id),
-        date: formData.date, // date/date Format: YYYY-MM-DD
+        date: formData.date,
         weight_kg: parseFloat(formData.weight_kg),
-        reps: parseInt(formData.reps, 10),
-        sets: formData.sets ? parseInt(formData.sets, 10) : undefined,
+        reps: parseInt(formData.reps),
+        sets: parseInt(formData.sets),
         note: formData.note || undefined,
       };
 
-      await LivingAppsService.createPrEintraegeEntry(newPR);
-
-      // Dialog schließen und Daten neu laden
-      setDialogOpen(false);
-      setFormData({
-        exercise_id: '',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        weight_kg: '',
-        reps: '',
-        sets: '',
-        note: '',
-      });
-      await loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Fehler beim Speichern');
-    } finally {
-      setSubmitting(false);
+      await LivingAppsService.createPrEintraegeEntry(data);
+      toast.success('PR erfolgreich eingetragen!');
+      setSheetOpen(false);
+      loadData();
+    } catch (error) {
+      console.error('Error creating PR:', error);
+      toast.error('Fehler beim Speichern');
     }
-  };
+  }
 
-  // Loading State
-  if (loading) {
+  function incrementValue(field: 'reps' | 'sets') {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: String(Math.max(1, parseInt(prev[field] || '0') + 1)),
+    }));
+  }
+
+  function decrementValue(field: 'reps' | 'sets') {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: String(Math.max(1, parseInt(prev[field] || '0') - 1)),
+    }));
+  }
+
+  // Filtered exercises for search
+  const filteredExercises = exercises.filter((ex) =>
+    ex.fields.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // === VIEWS ===
+
+  // Top App Bar (Sticky, Blur)
+  function TopAppBar() {
+    const title =
+      view === 'home'
+        ? 'Heute'
+        : view === 'exercise-detail'
+        ? selectedExercise?.fields.name
+        : 'PR Historie';
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-muted-foreground">Lade Daten...</p>
+      <div className="sticky top-0 z-50 backdrop-blur-lg bg-[var(--background)]/80 border-b border-[var(--border-dim)]">
+        <div className="flex items-center justify-between px-4 h-14 stagger-fade-in">
+          <div className="flex items-center gap-3">
+            {view !== 'home' && (
+              <button
+                onClick={() => setView('home')}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-1)] transition-colors press-feedback"
+              >
+                <ChevronRight className="w-5 h-5 rotate-180" />
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <Dumbbell className="w-5 h-5 text-[var(--accent)]" />
+              <h1 className="font-display font-bold text-lg">{title}</h1>
+            </div>
+          </div>
+          <button
+            onClick={() => openPRSheet()}
+            className="w-9 h-9 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-all press-feedback glow-accent"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
         </div>
       </div>
     );
   }
 
-  // Error State
-  if (error) {
+  // Home View
+  function HomeView() {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-destructive">Fehler</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button onClick={loadData}>Erneut versuchen</Button>
-          </CardContent>
-        </Card>
+      <div className="flex-1 overflow-auto pb-20">
+        {/* Hero: Recent PRs Carousel */}
+        {recentPRs.length > 0 && (
+          <section className="px-4 pt-6 pb-4 stagger-fade-in">
+            <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Letzte PRs
+            </h2>
+            <div
+              ref={scrollContainerRef}
+              className="flex gap-3 overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-2"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
+            >
+              {recentPRs.map((pr) => (
+                <div
+                  key={pr.record_id}
+                  className="flex-shrink-0 w-[280px] snap-start p-4 rounded-[var(--radius)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/50 transition-all cursor-pointer press-feedback"
+                  onClick={() => {
+                    const exId = extractRecordId(pr.fields.exercise_id);
+                    const exercise = exercises.find((ex) => ex.record_id === exId);
+                    if (exercise) handleExerciseClick(exercise);
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-display font-bold text-base leading-tight">{pr.exerciseName}</h3>
+                    {pr.fields.note && (
+                      <Badge variant="outline" className="text-xs">
+                        <StickyNote className="w-3 h-3" />
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="font-display text-4xl font-bold text-[var(--accent)]">
+                      {pr.fields.weight_kg}
+                    </span>
+                    <span className="text-sm text-[var(--text-muted)]">kg</span>
+                    <span className="text-lg text-[var(--text-muted)] mx-1">×</span>
+                    <span className="font-display text-2xl font-semibold">{pr.fields.reps}</span>
+                    <span className="text-sm text-[var(--text-muted)]">reps</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
+                    <Calendar className="w-3 h-3" />
+                    {pr.fields.date && format(new Date(pr.fields.date), 'dd. MMM yyyy', { locale: de })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Search */}
+        <section className="px-4 pt-4 pb-2 stagger-fade-in stagger-delay-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
+            <Input
+              type="text"
+              placeholder="Übung suchen..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-12 bg-[var(--surface-1)] border-[var(--border)] rounded-[var(--radius)] text-base"
+            />
+          </div>
+        </section>
+
+        {/* Exercise List */}
+        <section className="px-4 pt-4 pb-4 stagger-fade-in stagger-delay-2">
+          <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Übungen ({filteredExercises.length})
+          </h2>
+          <div className="space-y-2">
+            {filteredExercises.length === 0 ? (
+              <div className="text-center py-12 text-[var(--text-muted)]">
+                {searchQuery ? 'Keine Übungen gefunden' : 'Noch keine Übungen vorhanden'}
+              </div>
+            ) : (
+              filteredExercises.map((ex, idx) => (
+                <div
+                  key={ex.record_id}
+                  onClick={() => handleExerciseClick(ex)}
+                  className="flex items-center justify-between p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--surface-2)] transition-all cursor-pointer press-feedback"
+                  style={{
+                    animation: 'fade-in-stagger 0.4s ease-out forwards',
+                    animationDelay: `${idx * 60}ms`,
+                    opacity: 0,
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-display font-bold text-base mb-1 truncate">{ex.fields.name}</h3>
+                    {ex.lastPR && (
+                      <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                        <span>
+                          {ex.lastPR.fields.weight_kg}kg × {ex.lastPR.fields.reps}
+                        </span>
+                        <span className="text-[var(--text-dim)]">·</span>
+                        <span className="text-xs">
+                          {ex.lastPR.fields.date &&
+                            format(new Date(ex.lastPR.fields.date), 'dd.MM.yy', { locale: de })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {ex.prs.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {ex.prs.length} PRs
+                      </Badge>
+                    )}
+                    <ChevronRight className="w-5 h-5 text-[var(--text-dim)]" />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // Exercise Detail View
+  function ExerciseDetailView() {
+    if (!selectedExercise) return null;
+
+    return (
+      <div className="flex-1 overflow-auto pb-20">
+        {/* Hero Header */}
+        <section className="px-4 pt-8 pb-6 stagger-fade-in">
+          <h1 className="font-display text-4xl font-bold mb-4 leading-tight">
+            {selectedExercise.fields.name}
+          </h1>
+
+          {/* KPI Chips */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {selectedExercise.bestKg && (
+              <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-[var(--accent)]" />
+                <span className="text-sm font-medium">
+                  <span className="font-display font-bold text-[var(--accent)]">{selectedExercise.bestKg}</span>{' '}
+                  <span className="text-[var(--text-muted)]">kg max</span>
+                </span>
+              </div>
+            )}
+            {selectedExercise.bestReps && (
+              <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
+                <span className="text-sm font-medium">
+                  <span className="font-display font-bold text-[var(--accent)]">{selectedExercise.bestReps}</span>{' '}
+                  <span className="text-[var(--text-muted)]">reps max</span>
+                </span>
+              </div>
+            )}
+            {selectedExercise.lastPR && (
+              <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
+                <History className="w-4 h-4 text-[var(--text-muted)]" />
+                <span className="text-sm text-[var(--text-muted)]">
+                  {selectedExercise.lastPR.fields.date &&
+                    format(new Date(selectedExercise.lastPR.fields.date), 'dd. MMM', { locale: de })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* CTA */}
+          <Button
+            onClick={() => openPRSheet(selectedExercise.record_id)}
+            className="w-full h-12 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-medium rounded-[var(--radius-button)] press-feedback glow-accent"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            PR hinzufügen
+          </Button>
+        </section>
+
+        {/* Timeline / History */}
+        <section className="px-4 pb-6 stagger-fade-in stagger-delay-1">
+          <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+            <History className="w-4 h-4" />
+            Verlauf ({selectedExercise.prs.length})
+          </h2>
+
+          {selectedExercise.prs.length === 0 ? (
+            <div className="text-center py-12 text-[var(--text-muted)]">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--surface-1)] flex items-center justify-center">
+                <History className="w-6 h-6" />
+              </div>
+              <p className="mb-4">Noch keine PRs</p>
+              <Button
+                onClick={() => openPRSheet(selectedExercise.record_id)}
+                variant="outline"
+                className="press-feedback"
+              >
+                Ersten PR eintragen
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {selectedExercise.prs.map((pr, idx) => (
+                <div
+                  key={pr.record_id}
+                  className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/30 transition-all"
+                  style={{
+                    animation: 'fade-in-stagger 0.4s ease-out forwards',
+                    animationDelay: `${idx * 60}ms`,
+                    opacity: 0,
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-display text-3xl font-bold text-[var(--accent)]">
+                        {pr.fields.weight_kg}
+                      </span>
+                      <span className="text-sm text-[var(--text-muted)]">kg</span>
+                    </div>
+                    {pr.fields.date && (
+                      <div className="text-xs text-[var(--text-dim)] text-right">
+                        {format(new Date(pr.fields.date), 'dd. MMM yyyy', { locale: de })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-[var(--text-muted)]">
+                      {pr.fields.reps} reps × {pr.fields.sets} sets
+                    </span>
+                  </div>
+                  {pr.fields.note && (
+                    <div className="mt-3 pt-3 border-t border-[var(--border-dim)] text-sm text-[var(--text-muted)]">
+                      {pr.fields.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  // PRs Feed View
+  function PRsFeedView() {
+    const allPRs = exercises.flatMap((ex) =>
+      ex.prs.map((pr) => ({
+        ...pr,
+        exerciseName: ex.fields.name || 'Unbekannt',
+        exerciseId: ex.record_id,
+      }))
+    );
+
+    return (
+      <div className="flex-1 overflow-auto pb-20">
+        <section className="px-4 pt-6 pb-6">
+          <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Alle PRs ({allPRs.length})
+          </h2>
+
+          {allPRs.length === 0 ? (
+            <div className="text-center py-12 text-[var(--text-muted)]">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--surface-1)] flex items-center justify-center">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <p className="mb-4">Noch keine PRs eingetragen</p>
+              <Button onClick={() => openPRSheet()} variant="outline" className="press-feedback">
+                Ersten PR eintragen
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2 stagger-fade-in">
+              {allPRs.map((pr, idx) => (
+                <div
+                  key={pr.record_id}
+                  onClick={() => {
+                    const exercise = exercises.find((ex) => ex.record_id === pr.exerciseId);
+                    if (exercise) handleExerciseClick(exercise);
+                  }}
+                  className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--surface-2)] transition-all cursor-pointer press-feedback"
+                  style={{
+                    animation: 'fade-in-stagger 0.4s ease-out forwards',
+                    animationDelay: `${idx * 40}ms`,
+                    opacity: 0,
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-display font-bold text-base">{pr.exerciseName}</h3>
+                    {pr.fields.date && (
+                      <span className="text-xs text-[var(--text-dim)]">
+                        {format(new Date(pr.fields.date), 'dd.MM.yy', { locale: de })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-bold text-[var(--accent)]">
+                      {pr.fields.weight_kg}
+                    </span>
+                    <span className="text-sm text-[var(--text-muted)]">kg</span>
+                    <span className="text-[var(--text-muted)] mx-1">×</span>
+                    <span className="font-display text-lg font-semibold">{pr.fields.reps}</span>
+                    <span className="text-sm text-[var(--text-muted)]">reps</span>
+                    {pr.fields.sets && pr.fields.sets > 1 && (
+                      <>
+                        <span className="text-[var(--text-muted)] mx-1">×</span>
+                        <span className="text-sm text-[var(--text-muted)]">{pr.fields.sets} sets</span>
+                      </>
+                    )}
+                  </div>
+                  {pr.fields.note && (
+                    <div className="mt-2 text-sm text-[var(--text-dim)] line-clamp-1">{pr.fields.note}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  // PR Add Sheet
+  function PRAddSheet() {
+    return (
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent
+          side="bottom"
+          className="h-[85dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
+        >
+          <div className="flex flex-col h-full">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="font-display text-xl font-bold">PR eintragen</SheetTitle>
+                <button
+                  onClick={() => setSheetOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-2)] transition-colors press-feedback"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-sm text-[var(--text-muted)] mt-1">in kg</p>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-auto px-6 py-6 space-y-6">
+              {/* Exercise Selector */}
+              <div className="space-y-2">
+                <Label htmlFor="exercise" className="text-sm font-medium text-[var(--text-muted)]">
+                  Übung
+                </Label>
+                <Select
+                  value={formData.exercise_id}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, exercise_id: value }))}
+                >
+                  <SelectTrigger className="h-12 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]">
+                    <SelectValue placeholder="Übung auswählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {exercises.map((ex) => (
+                      <SelectItem key={ex.record_id} value={ex.record_id}>
+                        {ex.fields.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Weight (dominant) */}
+              <div className="space-y-2">
+                <Label htmlFor="weight" className="text-sm font-medium text-[var(--text-muted)]">
+                  Gewicht (kg)
+                </Label>
+                <Input
+                  id="weight"
+                  type="number"
+                  step="0.5"
+                  placeholder="z.B. 80"
+                  value={formData.weight_kg}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, weight_kg: e.target.value }))}
+                  className="h-16 text-3xl font-display font-bold text-center bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)] focus:border-[var(--accent)]"
+                />
+              </div>
+
+              {/* Reps & Sets (Stepper) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reps" className="text-sm font-medium text-[var(--text-muted)]">
+                    Wiederholungen
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => decrementValue('reps')}
+                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors press-feedback"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <Input
+                      id="reps"
+                      type="number"
+                      min="1"
+                      value={formData.reps}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, reps: e.target.value }))}
+                      className="h-10 text-center font-display font-bold text-xl bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => incrementValue('reps')}
+                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors press-feedback"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="sets" className="text-sm font-medium text-[var(--text-muted)]">
+                    Sätze
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => decrementValue('sets')}
+                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors press-feedback"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <Input
+                      id="sets"
+                      type="number"
+                      min="1"
+                      value={formData.sets}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, sets: e.target.value }))}
+                      className="h-10 text-center font-display font-bold text-xl bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => incrementValue('sets')}
+                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors press-feedback"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div className="space-y-2">
+                <Label htmlFor="date" className="text-sm font-medium text-[var(--text-muted)]">
+                  Datum
+                </Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
+                  className="h-12 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
+                />
+              </div>
+
+              {/* Note (collapsible) */}
+              <div className="space-y-2">
+                <Label htmlFor="note" className="text-sm font-medium text-[var(--text-muted)]">
+                  Notiz (optional)
+                </Label>
+                <Textarea
+                  id="note"
+                  placeholder="z.B. Gefühlt leicht, nächstes Mal mehr..."
+                  value={formData.note}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, note: e.target.value }))}
+                  className="min-h-[80px] bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)] resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 pb-6 pt-4 border-t border-[var(--border-dim)] space-y-3">
+              <Button
+                onClick={handleSubmitPR}
+                className="w-full h-12 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-medium rounded-[var(--radius-button)] press-feedback glow-accent"
+              >
+                Speichern
+              </Button>
+              <Button
+                onClick={() => setSheetOpen(false)}
+                variant="ghost"
+                className="w-full h-12 text-[var(--text-muted)] hover:bg-[var(--surface-2)] rounded-[var(--radius-button)] press-feedback"
+              >
+                Abbrechen
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Bottom Tab Bar
+  function BottomTabBar() {
+    const tabs = [
+      { id: 'home' as ViewType, label: 'Home', icon: Home },
+      { id: 'prs-feed' as ViewType, label: 'PRs', icon: BarChart3 },
+    ];
+
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-dim)] bg-[var(--surface-2)]/95 backdrop-blur-lg">
+        <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
+          {tabs.map((tab) => {
+            const isActive = view === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
+                  isActive ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+                }`}
+              >
+                <tab.icon className={`w-6 h-6 ${isActive ? 'glow-accent' : ''}`} />
+                <span className={`text-xs font-medium ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // === RENDER ===
+  if (loading) {
+    return (
+      <div className="phone-frame flex items-center justify-center min-h-screen bg-[var(--background)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-[var(--text-muted)]">Lädt...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-bold flex items-center gap-2">
-              <Trophy className="h-8 w-8 text-primary" />
-              Fitness PR Tracker
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Verfolge deine Personal Records und Trainingsfortschritte
-            </p>
-          </div>
+    <div className="phone-frame flex flex-col min-h-screen bg-[var(--background)] text-[var(--text)]">
+      <Toaster position="top-center" />
+      <TopAppBar />
 
-          {/* Action Button - Neuer PR */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="lg" className="gap-2">
-                <PlusCircle className="h-5 w-5" />
-                Neuer PR
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <form onSubmit={handleSubmit}>
-                <DialogHeader>
-                  <DialogTitle>Neuer Personal Record</DialogTitle>
-                  <DialogDescription>
-                    Trage deinen neuen PR ein und tracke deinen Fortschritt
-                  </DialogDescription>
-                </DialogHeader>
+      {view === 'home' && <HomeView />}
+      {view === 'exercise-detail' && <ExerciseDetailView />}
+      {view === 'prs-feed' && <PRsFeedView />}
 
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="exercise_id">
-                      Übung <span className="text-destructive">*</span>
-                    </Label>
-                    <Select
-                      value={formData.exercise_id}
-                      onValueChange={(value) => setFormData({ ...formData, exercise_id: value })}
-                    >
-                      <SelectTrigger id="exercise_id">
-                        <SelectValue placeholder="Übung auswählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uebungen.map((uebung) => (
-                          <SelectItem key={uebung.record_id} value={uebung.record_id}>
-                            {uebung.fields.name || 'Unbenannte Übung'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="date">
-                      Datum <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="weight_kg">
-                        Gewicht (kg) <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="weight_kg"
-                        type="number"
-                        step="0.5"
-                        placeholder="80"
-                        value={formData.weight_kg}
-                        onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="reps">
-                        Wiederholungen <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        id="reps"
-                        type="number"
-                        placeholder="10"
-                        value={formData.reps}
-                        onChange={(e) => setFormData({ ...formData, reps: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="sets">Sätze</Label>
-                    <Input
-                      id="sets"
-                      type="number"
-                      placeholder="3"
-                      value={formData.sets}
-                      onChange={(e) => setFormData({ ...formData, sets: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="note">Notiz</Label>
-                    <Textarea
-                      id="note"
-                      placeholder="Heute ging es besonders gut..."
-                      value={formData.note}
-                      onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
-                    Abbrechen
-                  </Button>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? 'Speichere...' : 'PR hinzufügen'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Übungen</CardTitle>
-              <Dumbbell className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalUebungen}</div>
-              <p className="text-xs text-muted-foreground">Verschiedene Übungen</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Gesamt PRs</CardTitle>
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalPRs}</div>
-              <p className="text-xs text-muted-foreground">Personal Records</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Letzter PR</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.lastPRDate
-                  ? format(parseISO(stats.lastPRDate), 'dd.MM.yy', { locale: de })
-                  : 'Keine Daten'}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {stats.lastPRDate && stats.trainingStreak === 0 && 'Heute'}
-                {stats.lastPRDate && stats.trainingStreak === 1 && 'Gestern'}
-                {stats.lastPRDate && stats.trainingStreak > 1 && `vor ${stats.trainingStreak} Tagen`}
-                {!stats.lastPRDate && 'Noch kein PR eingetragen'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Trainingssträhne</CardTitle>
-              <Flame className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.trainingStreak === 0 && '🔥 Heute'}
-                {stats.trainingStreak > 0 && `${stats.trainingStreak} Tage`}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {stats.trainingStreak === 0 && 'Weiter so!'}
-                {stats.trainingStreak > 0 && 'seit letztem PR'}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* PR-Historie Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                PR-Historie (letzte 30 Tage)
-              </CardTitle>
-              <CardDescription>Anzahl PRs pro Tag</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {prHistory.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={prHistory}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                  Keine Daten vorhanden
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Top Übungen */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5" />
-                Top Übungen
-              </CardTitle>
-              <CardDescription>Übungen nach PR-Anzahl sortiert</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {topUebungen.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={topUebungen} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" allowDecimals={false} />
-                    <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="prCount" fill="hsl(var(--primary))" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                  Keine Daten vorhanden
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Neueste PRs */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ArrowUpRight className="h-5 w-5" />
-              Neueste PRs
-            </CardTitle>
-            <CardDescription>Deine letzten 5 Personal Records</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentPRs.length > 0 ? (
-              <div className="space-y-4">
-                {recentPRs.map((pr) => (
-                  <div
-                    key={pr.record_id}
-                    className="flex flex-col md:flex-row md:items-center justify-between gap-2 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{pr.uebungName}</h3>
-                        <Badge variant="secondary">PR</Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                        <span>
-                          <strong>Gewicht:</strong> {pr.fields.weight_kg} kg
-                        </span>
-                        <span>
-                          <strong>Wiederholungen:</strong> {pr.fields.reps}
-                        </span>
-                        {pr.fields.sets && (
-                          <span>
-                            <strong>Sätze:</strong> {pr.fields.sets}
-                          </span>
-                        )}
-                      </div>
-                      {pr.fields.note && <p className="text-sm text-muted-foreground italic">"{pr.fields.note}"</p>}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {pr.fields.date && format(parseISO(pr.fields.date), 'dd.MM.yyyy', { locale: de })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Trophy className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p>Noch keine PRs eingetragen</p>
-                <p className="text-sm">Füge deinen ersten Personal Record hinzu!</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <PRAddSheet />
+      <BottomTabBar />
     </div>
   );
 }
