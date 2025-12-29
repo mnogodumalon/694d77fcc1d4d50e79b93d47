@@ -1359,100 +1359,95 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Share Card Overlay - Instagram Story Format */}
+      {/* Share Card Overlay - Fullscreen Instagram Story */}
       {shareCardOpen && shareData && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
-          {/* Close Button */}
+        <div
+          className="fixed inset-0 z-[100] flex flex-col"
+          style={{
+            background: 'linear-gradient(165deg, #1a1a24 0%, #0a0a0f 40%, #0d0d14 60%, #141419 100%)',
+          }}
+        >
+          {/* Close Button - wird beim Screenshot nicht sichtbar wenn man schnell ist */}
           <button
             onClick={() => setShareCardOpen(false)}
-            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors z-10"
+            className="absolute top-6 right-6 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors z-10"
           >
             <X className="w-6 h-6 text-white" />
           </button>
 
-          {/* Hint */}
-          <div className="absolute top-4 left-4 text-white/60 text-sm">
-            Screenshot für Story
-          </div>
+          {/* Decorative Glow Elements */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-[var(--accent)]/15 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/3" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-[var(--accent)]/10 rounded-full blur-[80px] translate-y-1/3 -translate-x-1/3" />
+          <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-[var(--accent)]/5 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2" />
 
-          {/* Share Card - 9:16 Aspect Ratio */}
-          <div
-            className="w-full max-w-[320px] aspect-[9/16] rounded-[24px] overflow-hidden relative"
-            style={{
-              background: 'linear-gradient(165deg, #1a1a24 0%, #0a0a0f 50%, #141419 100%)',
-              boxShadow: '0 0 60px rgba(255, 143, 168, 0.2), 0 0 120px rgba(255, 143, 168, 0.1)',
-            }}
-          >
-            {/* Decorative Elements */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-[var(--accent)]/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
-
-            {/* Content */}
-            <div className="relative h-full flex flex-col p-6">
-              {/* Top: PR Badge */}
-              {shareData.isPR && (
-                <div className="flex justify-center mb-4">
-                  <div className="px-4 py-2 rounded-full bg-[var(--accent)]/20 border border-[var(--accent)]/40 flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-[var(--accent)]" />
-                    <span className="text-sm font-bold text-[var(--accent)]">NEW PR</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Exercise Name */}
-              <div className="text-center mt-auto mb-6">
-                <h2 className="font-display text-2xl font-bold text-white/90 mb-1 leading-tight">
-                  {shareData.exerciseName}
-                </h2>
-                <p className="text-sm text-white/40">
-                  {shareData.date && format(new Date(shareData.date), 'dd. MMMM yyyy', { locale: de })}
-                </p>
-              </div>
-
-              {/* Main Stats */}
-              <div className="text-center mb-8">
-                <div className="flex items-baseline justify-center gap-2 mb-2">
-                  <span className="font-display text-7xl font-bold text-[var(--accent)]" style={{ textShadow: '0 0 40px rgba(255, 143, 168, 0.5)' }}>
-                    {shareData.weight}
-                  </span>
-                  <span className="text-2xl text-white/60">kg</span>
-                </div>
-                <div className="flex items-center justify-center gap-3 text-xl text-white/80">
-                  <span className="font-display font-semibold">{shareData.reps}</span>
-                  <span className="text-white/40">reps</span>
-                  <span className="text-white/20">×</span>
-                  <span className="font-display font-semibold">{shareData.sets}</span>
-                  <span className="text-white/40">sets</span>
+          {/* Content - Fullscreen */}
+          <div className="relative flex-1 flex flex-col px-8 py-12 safe-area-inset">
+            {/* Top: PR Badge */}
+            {shareData.isPR && (
+              <div className="flex justify-center mb-6">
+                <div className="px-5 py-2.5 rounded-full bg-[var(--accent)]/20 border border-[var(--accent)]/40 flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-[var(--accent)]" />
+                  <span className="text-base font-bold text-[var(--accent)] tracking-wide">NEW PR</span>
                 </div>
               </div>
+            )}
 
-              {/* e1RM Highlight */}
-              <div className="flex justify-center mb-auto">
-                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10">
-                  <div className="text-center">
-                    <p className="text-xs text-white/40 mb-1">Estimated 1RM</p>
-                    <p className="font-display text-3xl font-bold text-white">
-                      {shareData.e1rm} <span className="text-lg text-white/60">kg</span>
-                    </p>
-                  </div>
+            {/* Exercise Name */}
+            <div className="text-center mt-auto mb-8">
+              <h2 className="font-display text-3xl font-bold text-white mb-2 leading-tight">
+                {shareData.exerciseName}
+              </h2>
+              <p className="text-base text-white/40">
+                {shareData.date && format(new Date(shareData.date), 'dd. MMMM yyyy', { locale: de })}
+              </p>
+            </div>
+
+            {/* Main Stats - Hero */}
+            <div className="text-center mb-10">
+              <div className="flex items-baseline justify-center gap-3 mb-3">
+                <span
+                  className="font-display text-8xl font-bold text-[var(--accent)]"
+                  style={{ textShadow: '0 0 60px rgba(255, 143, 168, 0.6), 0 0 120px rgba(255, 143, 168, 0.3)' }}
+                >
+                  {shareData.weight}
+                </span>
+                <span className="text-3xl text-white/50 font-medium">kg</span>
+              </div>
+              <div className="flex items-center justify-center gap-4 text-2xl text-white/70">
+                <span className="font-display font-semibold">{shareData.reps}</span>
+                <span className="text-white/40">reps</span>
+                <span className="text-white/20">×</span>
+                <span className="font-display font-semibold">{shareData.sets}</span>
+                <span className="text-white/40">sets</span>
+              </div>
+            </div>
+
+            {/* e1RM Highlight */}
+            <div className="flex justify-center mb-auto">
+              <div className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                <div className="text-center">
+                  <p className="text-sm text-white/40 mb-1 tracking-wide">Estimated 1RM</p>
+                  <p className="font-display text-4xl font-bold text-white">
+                    {shareData.e1rm} <span className="text-xl text-white/50">kg</span>
+                  </p>
                 </div>
               </div>
+            </div>
 
-              {/* Total PRs Badge */}
-              {shareData.totalPRs && shareData.totalPRs > 1 && (
-                <div className="flex justify-center mt-6">
-                  <div className="flex items-center gap-2 text-white/40 text-sm">
-                    <Award className="w-4 h-4" />
-                    <span>{shareData.totalPRs} PRs total</span>
-                  </div>
+            {/* Total PRs Badge */}
+            {shareData.totalPRs && shareData.totalPRs > 1 && (
+              <div className="flex justify-center mt-8">
+                <div className="flex items-center gap-2 text-white/40 text-base">
+                  <Award className="w-5 h-5" />
+                  <span>{shareData.totalPRs} PRs total</span>
                 </div>
-              )}
-
-              {/* Bottom Branding */}
-              <div className="mt-auto pt-6 flex items-center justify-center gap-2 text-white/30">
-                <Dumbbell className="w-4 h-4" />
-                <span className="text-xs font-medium tracking-wider">PR TRACKER</span>
               </div>
+            )}
+
+            {/* Bottom Branding */}
+            <div className="mt-auto pt-8 flex items-center justify-center gap-3 text-white/25">
+              <Dumbbell className="w-5 h-5" />
+              <span className="text-sm font-medium tracking-[0.2em]">PR TRACKER</span>
             </div>
           </div>
         </div>
