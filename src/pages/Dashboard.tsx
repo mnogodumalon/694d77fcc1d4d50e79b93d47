@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
-import { format } from 'date-fns';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfWeek, getWeek } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
   TrendingUp,
+  TrendingDown,
   Plus,
   Search,
   Dumbbell,
-  Calendar,
+  Calendar as CalendarIcon,
   ChevronRight,
-  X,
+  ChevronLeft,
   Minus,
   Activity,
   Trophy,
@@ -16,6 +17,10 @@ import {
   Home,
   BarChart3,
   StickyNote,
+  Flame,
+  Target,
+  Zap,
+  Award,
 } from 'lucide-react';
 import type { Uebungen, PrEintraege } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -27,16 +32,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 // === TYPES ===
-type ViewType = 'home' | 'exercise-detail' | 'prs-feed';
+type ViewType = 'home' | 'exercise-detail' | 'prs-feed' | 'stats';
 
 interface ExerciseWithPRs extends Uebungen {
   prs: PrEintraege[];
   bestKg?: number;
   bestReps?: number;
+  bestE1rm?: number;
   lastPR?: PrEintraege;
 }
 
@@ -49,16 +57,84 @@ interface PRFormData {
   note: string;
 }
 
+interface PRAnalysis {
+  isWeightPR: boolean;
+  isRepPR: boolean;
+  isE1rmPR: boolean;
+  isVolumePR: boolean;
+  previousBest: {
+    weight: number;
+    reps: number;
+    e1rm: number;
+    volume: number;
+  };
+}
+
+// === HELPER FUNCTIONS ===
+
+// e1RM Berechnung (Epley Formel)
+function calculateE1RM(weight: number | undefined, reps: number | undefined): number {
+  if (!weight || !reps) return 0;
+  if (reps === 1) return weight;
+  return Math.round(weight * (1 + reps / 30));
+}
+
+// PR-Analyse
+function analyzePR(
+  newWeight: number,
+  newReps: number,
+  previousEntries: PrEintraege[]
+): PRAnalysis {
+  if (previousEntries.length === 0) {
+    return {
+      isWeightPR: true,
+      isRepPR: true,
+      isE1rmPR: true,
+      isVolumePR: true,
+      previousBest: { weight: 0, reps: 0, e1rm: 0, volume: 0 },
+    };
+  }
+
+  const maxWeight = Math.max(...previousEntries.map((e) => e.fields.weight_kg || 0));
+  const maxE1rm = Math.max(
+    ...previousEntries.map((e) => calculateE1RM(e.fields.weight_kg, e.fields.reps))
+  );
+  const maxVolume = Math.max(
+    ...previousEntries.map((e) => (e.fields.weight_kg || 0) * (e.fields.reps || 0))
+  );
+
+  // Rep-PR bei gleichem Gewicht
+  const sameWeight = previousEntries.filter((e) => e.fields.weight_kg === newWeight);
+  const maxRepsAtWeight = sameWeight.length > 0
+    ? Math.max(...sameWeight.map((e) => e.fields.reps || 0))
+    : 0;
+
+  const newE1rm = calculateE1RM(newWeight, newReps);
+  const newVolume = newWeight * newReps;
+
+  return {
+    isWeightPR: newWeight > maxWeight,
+    isRepPR: newReps > maxRepsAtWeight && sameWeight.length > 0,
+    isE1rmPR: newE1rm > maxE1rm,
+    isVolumePR: newVolume > maxVolume,
+    previousBest: { weight: maxWeight, reps: maxRepsAtWeight, e1rm: maxE1rm, volume: maxVolume },
+  };
+}
+
 // === MAIN COMPONENT ===
 export default function Dashboard() {
   // State Management
   const [view, setView] = useState<ViewType>('home');
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithPRs | null>(null);
   const [exercises, setExercises] = useState<ExerciseWithPRs[]>([]);
+  const [allPrEntries, setAllPrEntries] = useState<PrEintraege[]>([]);
   const [recentPRs, setRecentPRs] = useState<Array<PrEintraege & { exerciseName: string }>>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [dayDetailOpen, setDayDetailOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const [formData, setFormData] = useState<PRFormData>({
     exercise_id: '',
@@ -84,19 +160,27 @@ export default function Dashboard() {
         LivingAppsService.getPrEintraege(),
       ]);
 
+      setAllPrEntries(prEintraege);
+
       // Group PRs by exercise
       const exercisesWithPRs: ExerciseWithPRs[] = uebungen.map((ex) => {
-        const exercisePRs = prEintraege.filter((pr) => {
-          const exId = extractRecordId(pr.fields.exercise_id);
-          return exId === ex.record_id;
-        }).sort((a, b) => {
-          const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
-          const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
-          return dateB - dateA; // Newest first
-        });
+        const exercisePRs = prEintraege
+          .filter((pr) => {
+            const exId = extractRecordId(pr.fields.exercise_id);
+            return exId === ex.record_id;
+          })
+          .sort((a, b) => {
+            const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
+            const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
+            return dateB - dateA;
+          });
 
         const bestKg = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.weight_kg || 0), 0);
         const bestReps = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.reps || 0), 0);
+        const bestE1rm = exercisePRs.reduce(
+          (max, pr) => Math.max(max, calculateE1RM(pr.fields.weight_kg, pr.fields.reps)),
+          0
+        );
         const lastPR = exercisePRs[0];
 
         return {
@@ -104,13 +188,14 @@ export default function Dashboard() {
           prs: exercisePRs,
           bestKg: bestKg > 0 ? bestKg : undefined,
           bestReps: bestReps > 0 ? bestReps : undefined,
+          bestE1rm: bestE1rm > 0 ? bestE1rm : undefined,
           lastPR,
         };
       });
 
       setExercises(exercisesWithPRs);
 
-      // Recent PRs for Hero Carousel (last 10 PRs across all exercises)
+      // Recent PRs for Hero Carousel
       const recent = prEintraege
         .sort((a, b) => {
           const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
@@ -135,6 +220,119 @@ export default function Dashboard() {
       setLoading(false);
     }
   }
+
+  // PRs grouped by date for calendar
+  const prsByDate = useMemo(() => {
+    const grouped: Record<string, PrEintraege[]> = {};
+    allPrEntries.forEach((pr) => {
+      const date = pr.fields.date?.split('T')[0];
+      if (date) {
+        if (!grouped[date]) grouped[date] = [];
+        grouped[date].push(pr);
+      }
+    });
+    return grouped;
+  }, [allPrEntries]);
+
+  // "Heute vs. Letztes Mal" - Last PR for selected exercise
+  const lastPRForExercise = useMemo(() => {
+    if (!formData.exercise_id) return null;
+    const exercise = exercises.find((ex) => ex.record_id === formData.exercise_id);
+    return exercise?.lastPR || null;
+  }, [formData.exercise_id, exercises]);
+
+  // Live comparison while typing
+  const liveComparison = useMemo(() => {
+    if (!lastPRForExercise || !formData.weight_kg || !formData.reps) return null;
+    const newWeight = parseFloat(formData.weight_kg);
+    const newReps = parseInt(formData.reps);
+    if (isNaN(newWeight) || isNaN(newReps)) return null;
+
+    const lastWeight = lastPRForExercise.fields.weight_kg || 0;
+    const lastReps = lastPRForExercise.fields.reps || 0;
+    const lastE1rm = calculateE1RM(lastWeight, lastReps);
+    const newE1rm = calculateE1RM(newWeight, newReps);
+
+    return {
+      weightDiff: newWeight - lastWeight,
+      repsDiff: newReps - lastReps,
+      e1rmDiff: newE1rm - lastE1rm,
+      lastE1rm,
+      newE1rm,
+    };
+  }, [lastPRForExercise, formData.weight_kg, formData.reps]);
+
+  // Stats calculations
+  const statsData = useMemo(() => {
+    if (allPrEntries.length === 0) return null;
+
+    // Unique training days
+    const uniqueDates = new Set(allPrEntries.map((pr) => pr.fields.date?.split('T')[0]).filter(Boolean));
+    const totalSessions = uniqueDates.size;
+
+    // Sessions per week
+    const sortedDates = Array.from(uniqueDates).sort();
+    const firstDate = sortedDates[0] ? new Date(sortedDates[0]) : new Date();
+    const daysSinceFirst = Math.max(1, differenceInDays(new Date(), firstDate));
+    const weeksActive = Math.max(1, Math.ceil(daysSinceFirst / 7));
+    const sessionsPerWeek = (totalSessions / weeksActive).toFixed(1);
+
+    // Top 3-5 exercises by frequency (for Strength Index)
+    const exerciseFrequency: Record<string, number> = {};
+    allPrEntries.forEach((pr) => {
+      const exId = extractRecordId(pr.fields.exercise_id);
+      if (exId) {
+        exerciseFrequency[exId] = (exerciseFrequency[exId] || 0) + 1;
+      }
+    });
+
+    const topExerciseIds = Object.entries(exerciseFrequency)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => id);
+
+    const topExercises = exercises.filter((ex) => topExerciseIds.includes(ex.record_id));
+
+    // Strength Index (average best e1RM of top exercises)
+    const strengthIndex =
+      topExercises.length > 0
+        ? Math.round(
+            topExercises.reduce((sum, ex) => sum + (ex.bestE1rm || 0), 0) / topExercises.length
+          )
+        : 0;
+
+    // Consistency streak (weeks with ≥2 sessions)
+    const weeklyTraining: Record<number, number> = {};
+    uniqueDates.forEach((dateStr) => {
+      if (dateStr) {
+        const date = new Date(dateStr);
+        const weekNum = getWeek(date, { weekStartsOn: 1 });
+        const year = date.getFullYear();
+        const key = year * 100 + weekNum;
+        weeklyTraining[key] = (weeklyTraining[key] || 0) + 1;
+      }
+    });
+
+    let currentStreak = 0;
+    const sortedWeeks = Object.keys(weeklyTraining)
+      .map(Number)
+      .sort((a, b) => b - a);
+    for (const week of sortedWeeks) {
+      if (weeklyTraining[week] >= 2) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      totalSessions,
+      sessionsPerWeek,
+      strengthIndex,
+      currentStreak,
+      topExercises,
+    };
+  }, [allPrEntries, exercises]);
 
   // Handlers
   function handleExerciseClick(exercise: ExerciseWithPRs) {
@@ -161,17 +359,43 @@ export default function Dashboard() {
     }
 
     try {
+      const newWeight = parseFloat(formData.weight_kg);
+      const newReps = parseInt(formData.reps);
+      const exercise = exercises.find((ex) => ex.record_id === formData.exercise_id);
+
+      // Analyze PRs
+      const prAnalysis = exercise
+        ? analyzePR(newWeight, newReps, exercise.prs)
+        : null;
+
       const data: PrEintraege['fields'] = {
         exercise_id: createRecordUrl(APP_IDS.UEBUNGEN, formData.exercise_id),
         date: formData.date,
-        weight_kg: parseFloat(formData.weight_kg),
-        reps: parseInt(formData.reps),
+        weight_kg: newWeight,
+        reps: newReps,
         sets: parseInt(formData.sets),
         note: formData.note || undefined,
       };
 
       await LivingAppsService.createPrEintraegeEntry(data);
-      toast.success('PR erfolgreich eingetragen!');
+
+      // Show PR badges if any
+      if (prAnalysis) {
+        const prTypes: string[] = [];
+        if (prAnalysis.isWeightPR) prTypes.push('Gewichts-PR');
+        if (prAnalysis.isE1rmPR) prTypes.push('e1RM-PR');
+        if (prAnalysis.isVolumePR) prTypes.push('Volumen-PR');
+        if (prAnalysis.isRepPR) prTypes.push('Rep-PR');
+
+        if (prTypes.length > 0) {
+          toast.success(`Neuer ${prTypes.join(' + ')}! 🎉`);
+        } else {
+          toast.success('PR erfolgreich eingetragen!');
+        }
+      } else {
+        toast.success('PR erfolgreich eingetragen!');
+      }
+
       setSheetOpen(false);
       loadData();
     } catch (error) {
@@ -194,27 +418,54 @@ export default function Dashboard() {
     }));
   }
 
+  function openDayDetail(date: Date) {
+    setSelectedDate(date);
+    setDayDetailOpen(true);
+  }
+
   // Filtered exercises for search
   const filteredExercises = exercises.filter((ex) =>
     ex.fields.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Get PRs for selected date
+  const prsForSelectedDate = useMemo(() => {
+    if (!selectedDate) return [];
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    return (prsByDate[dateStr] || []).map((pr) => {
+      const exId = extractRecordId(pr.fields.exercise_id);
+      const exercise = exercises.find((ex) => ex.record_id === exId);
+      return { ...pr, exerciseName: exercise?.fields.name || 'Unbekannt' };
+    });
+  }, [selectedDate, prsByDate, exercises]);
+
+  // Calendar heatmap intensity
+  function getHeatmapIntensity(dateStr: string): 'none' | 'low' | 'medium' | 'high' {
+    const count = prsByDate[dateStr]?.length || 0;
+    if (count === 0) return 'none';
+    if (count <= 2) return 'low';
+    if (count <= 4) return 'medium';
+    return 'high';
+  }
+
   // === VIEWS ===
 
-  // Top App Bar (Sticky, Blur)
+  // Top App Bar
   function TopAppBar() {
     const title =
       view === 'home'
         ? 'Heute'
         : view === 'exercise-detail'
         ? selectedExercise?.fields.name
+        : view === 'stats'
+        ? 'Statistiken'
         : 'PR Historie';
 
     return (
       <div className="sticky top-0 z-50 backdrop-blur-lg bg-[var(--background)]/80 border-b border-[var(--border-dim)]">
         <div className="flex items-center justify-between px-4 h-14 stagger-fade-in">
           <div className="flex items-center gap-3">
-            {view !== 'home' && (
+            {(view === 'exercise-detail') && (
               <button
                 onClick={() => setView('home')}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-1)] transition-colors press-feedback"
@@ -252,10 +503,7 @@ export default function Dashboard() {
             <div
               ref={scrollContainerRef}
               className="flex gap-3 overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-2"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-              }}
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {recentPRs.map((pr) => (
                 <div
@@ -268,7 +516,9 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <h3 className="font-display font-bold text-base leading-tight">{pr.exerciseName}</h3>
+                    <h3 className="font-display font-bold text-base leading-tight">
+                      {pr.exerciseName}
+                    </h3>
                     {pr.fields.note && (
                       <Badge variant="outline" className="text-xs">
                         <StickyNote className="w-3 h-3" />
@@ -285,7 +535,7 @@ export default function Dashboard() {
                     <span className="text-sm text-[var(--text-muted)]">reps</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
-                    <Calendar className="w-3 h-3" />
+                    <CalendarIcon className="w-3 h-3" />
                     {pr.fields.date && format(new Date(pr.fields.date), 'dd. MMM yyyy', { locale: de })}
                   </div>
                 </div>
@@ -332,7 +582,9 @@ export default function Dashboard() {
                   }}
                 >
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-display font-bold text-base mb-1 truncate">{ex.fields.name}</h3>
+                    <h3 className="font-display font-bold text-base mb-1 truncate">
+                      {ex.fields.name}
+                    </h3>
                     {ex.lastPR && (
                       <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                         <span>
@@ -363,15 +615,30 @@ export default function Dashboard() {
     );
   }
 
-  // Exercise Detail View
+  // Exercise Detail View with Charts
   function ExerciseDetailView() {
     if (!selectedExercise) return null;
+
+    // Prepare chart data
+    const chartData = useMemo(() => {
+      return selectedExercise.prs
+        .slice()
+        .reverse()
+        .map((pr) => ({
+          date: pr.fields.date ? format(new Date(pr.fields.date), 'dd.MM', { locale: de }) : '',
+          fullDate: pr.fields.date,
+          weight: pr.fields.weight_kg || 0,
+          reps: pr.fields.reps || 0,
+          e1rm: calculateE1RM(pr.fields.weight_kg, pr.fields.reps),
+          volume: (pr.fields.weight_kg || 0) * (pr.fields.reps || 0),
+        }));
+    }, [selectedExercise.prs]);
 
     return (
       <div className="flex-1 overflow-auto pb-20">
         {/* Hero Header */}
         <section className="px-4 pt-8 pb-6 stagger-fade-in">
-          <h1 className="font-display text-4xl font-bold mb-4 leading-tight">
+          <h1 className="font-display text-3xl font-bold mb-4 leading-tight">
             {selectedExercise.fields.name}
           </h1>
 
@@ -381,17 +648,21 @@ export default function Dashboard() {
               <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
                 <Trophy className="w-4 h-4 text-[var(--accent)]" />
                 <span className="text-sm font-medium">
-                  <span className="font-display font-bold text-[var(--accent)]">{selectedExercise.bestKg}</span>{' '}
-                  <span className="text-[var(--text-muted)]">kg max</span>
+                  <span className="font-display font-bold text-[var(--accent)]">
+                    {selectedExercise.bestKg}
+                  </span>{' '}
+                  <span className="text-[var(--text-muted)]">kg</span>
                 </span>
               </div>
             )}
-            {selectedExercise.bestReps && (
+            {selectedExercise.bestE1rm && (
               <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
+                <Target className="w-4 h-4 text-[var(--accent)]" />
                 <span className="text-sm font-medium">
-                  <span className="font-display font-bold text-[var(--accent)]">{selectedExercise.bestReps}</span>{' '}
-                  <span className="text-[var(--text-muted)]">reps max</span>
+                  <span className="font-display font-bold text-[var(--accent)]">
+                    {selectedExercise.bestE1rm}
+                  </span>{' '}
+                  <span className="text-[var(--text-muted)]">e1RM</span>
                 </span>
               </div>
             )}
@@ -416,8 +687,94 @@ export default function Dashboard() {
           </Button>
         </section>
 
+        {/* Progress Charts */}
+        {chartData.length >= 2 && (
+          <section className="px-4 pb-6 stagger-fade-in stagger-delay-1">
+            <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Progress
+            </h2>
+            <Tabs defaultValue="weight" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 bg-[var(--surface-1)] rounded-[var(--radius-button)] p-1 h-10">
+                <TabsTrigger value="weight" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">Gewicht</TabsTrigger>
+                <TabsTrigger value="e1rm" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">e1RM</TabsTrigger>
+                <TabsTrigger value="volume" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">Volumen</TabsTrigger>
+              </TabsList>
+              <TabsContent value="weight" className="mt-4">
+                <div className="h-[200px] w-full bg-[var(--surface-1)] rounded-[var(--radius)] p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ff8fa8" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#ff8fa8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" stroke="#727280" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#727280" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1c1c24', border: '1px solid #2a2a35', borderRadius: '8px' }}
+                        labelStyle={{ color: '#e8e8f0' }}
+                        itemStyle={{ color: '#ff8fa8' }}
+                        formatter={(value: number) => [`${value} kg`, 'Gewicht']}
+                      />
+                      <Area type="monotone" dataKey="weight" stroke="#ff8fa8" strokeWidth={2} fill="url(#colorWeight)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </TabsContent>
+              <TabsContent value="e1rm" className="mt-4">
+                <div className="h-[200px] w-full bg-[var(--surface-1)] rounded-[var(--radius)] p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorE1rm" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ff8fa8" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#ff8fa8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" stroke="#727280" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#727280" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1c1c24', border: '1px solid #2a2a35', borderRadius: '8px' }}
+                        labelStyle={{ color: '#e8e8f0' }}
+                        itemStyle={{ color: '#ff8fa8' }}
+                        formatter={(value: number) => [`${value} kg`, 'e1RM']}
+                      />
+                      <Area type="monotone" dataKey="e1rm" stroke="#ff8fa8" strokeWidth={2} fill="url(#colorE1rm)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </TabsContent>
+              <TabsContent value="volume" className="mt-4">
+                <div className="h-[200px] w-full bg-[var(--surface-1)] rounded-[var(--radius)] p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ff8fa8" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#ff8fa8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="date" stroke="#727280" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#727280" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1c1c24', border: '1px solid #2a2a35', borderRadius: '8px' }}
+                        labelStyle={{ color: '#e8e8f0' }}
+                        itemStyle={{ color: '#ff8fa8' }}
+                        formatter={(value: number) => [`${value}`, 'Volumen']}
+                      />
+                      <Area type="monotone" dataKey="volume" stroke="#ff8fa8" strokeWidth={2} fill="url(#colorVolume)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </section>
+        )}
+
         {/* Timeline / History */}
-        <section className="px-4 pb-6 stagger-fade-in stagger-delay-1">
+        <section className="px-4 pb-6 stagger-fade-in stagger-delay-2">
           <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
             <History className="w-4 h-4" />
             Verlauf ({selectedExercise.prs.length})
@@ -466,6 +823,9 @@ export default function Dashboard() {
                     <span className="text-[var(--text-muted)]">
                       {pr.fields.reps} reps × {pr.fields.sets} sets
                     </span>
+                    <Badge variant="outline" className="text-xs">
+                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
+                    </Badge>
                   </div>
                   {pr.fields.note && (
                     <div className="mt-3 pt-3 border-t border-[var(--border-dim)] text-sm text-[var(--text-muted)]">
@@ -481,6 +841,185 @@ export default function Dashboard() {
     );
   }
 
+  // Stats View with Calendar
+  function StatsView() {
+    const monthStart = startOfMonth(calendarMonth);
+    const monthEnd = endOfMonth(calendarMonth);
+    const days = eachDayOfInterval({ start: startOfWeek(monthStart, { weekStartsOn: 1 }), end: monthEnd });
+
+    // Pad to full weeks
+    while (days.length % 7 !== 0) {
+      days.push(new Date(days[days.length - 1].getTime() + 86400000));
+    }
+
+    return (
+      <div className="flex-1 overflow-auto pb-20">
+        {/* Stats Overview */}
+        {statsData && (
+          <section className="px-4 pt-6 pb-4 stagger-fade-in">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 rounded-[var(--radius)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="w-4 h-4 text-[var(--accent)]" />
+                  <span className="text-xs text-[var(--text-muted)]">Strength Index</span>
+                </div>
+                <span className="font-display text-3xl font-bold text-[var(--accent)]">
+                  {statsData.strengthIndex}
+                </span>
+                <span className="text-sm text-[var(--text-muted)] ml-1">kg</span>
+              </div>
+              <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity className="w-4 h-4 text-[var(--text-muted)]" />
+                  <span className="text-xs text-[var(--text-muted)]">Sessions/Woche</span>
+                </div>
+                <span className="font-display text-3xl font-bold">{statsData.sessionsPerWeek}</span>
+              </div>
+              <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Flame className="w-4 h-4 text-orange-400" />
+                  <span className="text-xs text-[var(--text-muted)]">Streak</span>
+                </div>
+                <span className="font-display text-3xl font-bold">{statsData.currentStreak}</span>
+                <span className="text-sm text-[var(--text-muted)] ml-1">Wochen</span>
+              </div>
+              <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <CalendarIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                  <span className="text-xs text-[var(--text-muted)]">Total</span>
+                </div>
+                <span className="font-display text-3xl font-bold">{statsData.totalSessions}</span>
+                <span className="text-sm text-[var(--text-muted)] ml-1">Sessions</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Calendar Heatmap */}
+        <section className="px-4 pt-4 pb-6 stagger-fade-in stagger-delay-1">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-medium text-[var(--text-muted)] flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4" />
+              Trainings-Kalender
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-1)] transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-medium min-w-[100px] text-center">
+                {format(calendarMonth, 'MMMM yyyy', { locale: de })}
+              </span>
+              <button
+                onClick={() => setCalendarMonth(new Date(calendarMonth.getTime() + 30 * 86400000))}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--surface-1)] transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Weekday headers */}
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
+              <div key={day} className="text-center text-xs text-[var(--text-dim)] py-1">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar days */}
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((day, idx) => {
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const intensity = getHeatmapIntensity(dateStr);
+              const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
+              const isToday = isSameDay(day, new Date());
+              const hasPRs = (prsByDate[dateStr]?.length || 0) > 0;
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => hasPRs && openDayDetail(day)}
+                  disabled={!hasPRs}
+                  className={`
+                    aspect-square rounded-lg flex flex-col items-center justify-center text-sm transition-all
+                    ${!isCurrentMonth ? 'opacity-30' : ''}
+                    ${isToday ? 'ring-2 ring-[var(--accent)]' : ''}
+                    ${intensity === 'none' ? 'bg-[var(--surface-1)]' : ''}
+                    ${intensity === 'low' ? 'bg-[var(--accent)]/20' : ''}
+                    ${intensity === 'medium' ? 'bg-[var(--accent)]/40' : ''}
+                    ${intensity === 'high' ? 'bg-[var(--accent)]/60' : ''}
+                    ${hasPRs ? 'cursor-pointer hover:ring-2 hover:ring-[var(--accent)]/50' : 'cursor-default'}
+                  `}
+                >
+                  <span className={isToday ? 'font-bold' : ''}>{format(day, 'd')}</span>
+                  {hasPRs && (
+                    <div className="flex gap-0.5 mt-0.5">
+                      <div className="w-1 h-1 rounded-full bg-[var(--accent)]" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center justify-center gap-4 mt-4 text-xs text-[var(--text-dim)]">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[var(--surface-1)]" />
+              <span>0</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[var(--accent)]/20" />
+              <span>1-2</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[var(--accent)]/40" />
+              <span>3-4</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[var(--accent)]/60" />
+              <span>5+</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Top Exercises */}
+        {statsData && statsData.topExercises.length > 0 && (
+          <section className="px-4 pb-6 stagger-fade-in stagger-delay-2">
+            <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
+              <Award className="w-4 h-4" />
+              Top Übungen (Strength Index)
+            </h2>
+            <div className="space-y-2">
+              {statsData.topExercises.map((ex, idx) => (
+                <div
+                  key={ex.record_id}
+                  onClick={() => handleExerciseClick(ex)}
+                  className="flex items-center justify-between p-3 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] cursor-pointer hover:border-[var(--accent)]/50 transition-all press-feedback"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[var(--surface-2)] flex items-center justify-center text-xs font-bold">
+                      {idx + 1}
+                    </span>
+                    <span className="font-medium">{ex.fields.name}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-display font-bold text-[var(--accent)]">{ex.bestE1rm}</span>
+                    <span className="text-xs text-[var(--text-muted)] ml-1">e1RM</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  }
+
   // PRs Feed View
   function PRsFeedView() {
     const allPRs = exercises.flatMap((ex) =>
@@ -489,7 +1028,11 @@ export default function Dashboard() {
         exerciseName: ex.fields.name || 'Unbekannt',
         exerciseId: ex.record_id,
       }))
-    );
+    ).sort((a, b) => {
+      const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
+      const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
+      return dateB - dateA;
+    });
 
     return (
       <div className="flex-1 overflow-auto pb-20">
@@ -541,16 +1084,10 @@ export default function Dashboard() {
                     <span className="text-[var(--text-muted)] mx-1">×</span>
                     <span className="font-display text-lg font-semibold">{pr.fields.reps}</span>
                     <span className="text-sm text-[var(--text-muted)]">reps</span>
-                    {pr.fields.sets && pr.fields.sets > 1 && (
-                      <>
-                        <span className="text-[var(--text-muted)] mx-1">×</span>
-                        <span className="text-sm text-[var(--text-muted)]">{pr.fields.sets} sets</span>
-                      </>
-                    )}
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
+                    </Badge>
                   </div>
-                  {pr.fields.note && (
-                    <div className="mt-2 text-sm text-[var(--text-dim)] line-clamp-1">{pr.fields.note}</div>
-                  )}
                 </div>
               ))}
             </div>
@@ -579,26 +1116,24 @@ export default function Dashboard() {
 
       {view === 'home' && <HomeView />}
       {view === 'exercise-detail' && <ExerciseDetailView />}
+      {view === 'stats' && <StatsView />}
       {view === 'prs-feed' && <PRsFeedView />}
 
-      {/* PR Add Sheet - Inline statt Funktion um Re-Mount zu vermeiden */}
+      {/* PR Add Sheet with "Heute vs. Letztes Mal" */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="bottom"
-          className="h-[85dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
+          className="h-[90dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
               <SheetTitle className="font-display text-xl font-bold">PR eintragen</SheetTitle>
-              <p className="text-sm text-[var(--text-muted)] mt-1">in kg</p>
             </SheetHeader>
 
-            <div className="flex-1 overflow-auto px-6 py-6 space-y-6">
+            <div className="flex-1 overflow-auto px-6 py-6 space-y-5">
               {/* Exercise Selector */}
               <div className="space-y-2">
-                <Label htmlFor="exercise" className="text-sm font-medium text-[var(--text-muted)]">
-                  Übung
-                </Label>
+                <Label className="text-sm font-medium text-[var(--text-muted)]">Übung</Label>
                 <Select
                   value={formData.exercise_id}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, exercise_id: value }))}
@@ -616,13 +1151,33 @@ export default function Dashboard() {
                 </Select>
               </div>
 
-              {/* Weight (dominant) */}
+              {/* "Heute vs. Letztes Mal" - Last PR Display */}
+              {lastPRForExercise && (
+                <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-2)] border border-[var(--border)]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <History className="w-4 h-4 text-[var(--text-muted)]" />
+                    <span className="text-sm text-[var(--text-muted)]">Letztes Top-Set</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-bold">
+                      {lastPRForExercise.fields.weight_kg}kg
+                    </span>
+                    <span className="text-[var(--text-muted)]">×</span>
+                    <span className="font-display text-xl font-semibold">
+                      {lastPRForExercise.fields.reps}
+                    </span>
+                    <span className="text-sm text-[var(--text-dim)] ml-2">
+                      {lastPRForExercise.fields.date &&
+                        format(new Date(lastPRForExercise.fields.date), 'dd.MM.yy', { locale: de })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Weight Input */}
               <div className="space-y-2">
-                <Label htmlFor="weight" className="text-sm font-medium text-[var(--text-muted)]">
-                  Gewicht (kg)
-                </Label>
+                <Label className="text-sm font-medium text-[var(--text-muted)]">Gewicht (kg)</Label>
                 <Input
-                  id="weight"
                   type="number"
                   step="0.5"
                   placeholder="z.B. 80"
@@ -632,12 +1187,34 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Reps & Sets (Stepper) */}
+              {/* Live Comparison */}
+              {liveComparison && (
+                <div className="p-4 rounded-[var(--radius)] bg-gradient-to-r from-[var(--accent)]/10 to-transparent border border-[var(--accent)]/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="w-4 h-4 text-[var(--accent)]" />
+                    <span className="text-sm font-medium text-[var(--accent)]">Heute vs. Letztes Mal</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <span className={liveComparison.weightDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {liveComparison.weightDiff >= 0 ? '+' : ''}{liveComparison.weightDiff}kg
+                    </span>
+                    <span className={liveComparison.repsDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {liveComparison.repsDiff >= 0 ? '+' : ''}{liveComparison.repsDiff} reps
+                    </span>
+                    <span className="text-[var(--text-muted)]">
+                      e1RM: {liveComparison.lastE1rm} → {liveComparison.newE1rm}
+                      <span className={liveComparison.e1rmDiff >= 0 ? 'text-green-400 ml-1' : 'text-red-400 ml-1'}>
+                        ({liveComparison.e1rmDiff >= 0 ? '+' : ''}{liveComparison.e1rmDiff})
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Reps & Sets */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reps" className="text-sm font-medium text-[var(--text-muted)]">
-                    Wiederholungen
-                  </Label>
+                  <Label className="text-sm font-medium text-[var(--text-muted)]">Wiederholungen</Label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -647,7 +1224,6 @@ export default function Dashboard() {
                       <Minus className="w-4 h-4" />
                     </button>
                     <Input
-                      id="reps"
                       type="number"
                       min="1"
                       value={formData.reps}
@@ -665,9 +1241,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="sets" className="text-sm font-medium text-[var(--text-muted)]">
-                    Sätze
-                  </Label>
+                  <Label className="text-sm font-medium text-[var(--text-muted)]">Sätze</Label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -677,7 +1251,6 @@ export default function Dashboard() {
                       <Minus className="w-4 h-4" />
                     </button>
                     <Input
-                      id="sets"
                       type="number"
                       min="1"
                       value={formData.sets}
@@ -697,11 +1270,8 @@ export default function Dashboard() {
 
               {/* Date */}
               <div className="space-y-2">
-                <Label htmlFor="date" className="text-sm font-medium text-[var(--text-muted)]">
-                  Datum
-                </Label>
+                <Label className="text-sm font-medium text-[var(--text-muted)]">Datum</Label>
                 <Input
-                  id="date"
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
@@ -709,13 +1279,10 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Note (collapsible) */}
+              {/* Note */}
               <div className="space-y-2">
-                <Label htmlFor="note" className="text-sm font-medium text-[var(--text-muted)]">
-                  Notiz (optional)
-                </Label>
+                <Label className="text-sm font-medium text-[var(--text-muted)]">Notiz (optional)</Label>
                 <Textarea
-                  id="note"
                   placeholder="z.B. Gefühlt leicht, nächstes Mal mehr..."
                   value={formData.note}
                   onChange={(e) => setFormData((prev) => ({ ...prev, note: e.target.value }))}
@@ -744,17 +1311,72 @@ export default function Dashboard() {
         </SheetContent>
       </Sheet>
 
-      {/* Bottom Tab Bar - Inline */}
+      {/* Day Detail Sheet */}
+      <Sheet open={dayDetailOpen} onOpenChange={setDayDetailOpen}>
+        <SheetContent
+          side="bottom"
+          className="h-[60dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
+        >
+          <div className="flex flex-col h-full">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
+              <SheetTitle className="font-display text-xl font-bold">
+                {selectedDate && format(selectedDate, 'EEEE, dd. MMMM yyyy', { locale: de })}
+              </SheetTitle>
+              <p className="text-sm text-[var(--text-muted)]">
+                {prsForSelectedDate.length} Übung{prsForSelectedDate.length !== 1 ? 'en' : ''}
+              </p>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-auto px-6 py-4 space-y-2">
+              {prsForSelectedDate.map((pr) => (
+                <div
+                  key={pr.record_id}
+                  className="p-4 rounded-[var(--radius)] bg-[var(--surface-2)] border border-[var(--border)]"
+                >
+                  <h3 className="font-display font-bold mb-2">{pr.exerciseName}</h3>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-bold text-[var(--accent)]">
+                      {pr.fields.weight_kg}
+                    </span>
+                    <span className="text-sm text-[var(--text-muted)]">kg</span>
+                    <span className="text-[var(--text-muted)] mx-1">×</span>
+                    <span className="font-display text-lg font-semibold">{pr.fields.reps}</span>
+                    <span className="text-sm text-[var(--text-muted)]">reps</span>
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Bottom Tab Bar - 3 Tabs */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-dim)] bg-[var(--surface-2)]/95 backdrop-blur-lg">
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
           <button
             onClick={() => setView('home')}
             className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
-              view === 'home' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+              view === 'home' || view === 'exercise-detail'
+                ? 'text-[var(--accent)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text)]'
             }`}
           >
-            <Home className="w-6 h-6" style={{ strokeWidth: view === 'home' ? 2.5 : 2 }} />
-            <span className={`text-xs font-medium ${view === 'home' ? 'font-bold' : ''}`}>Home</span>
+            <Home className="w-6 h-6" style={{ strokeWidth: view === 'home' || view === 'exercise-detail' ? 2.5 : 2 }} />
+            <span className={`text-xs font-medium ${view === 'home' || view === 'exercise-detail' ? 'font-bold' : ''}`}>
+              Home
+            </span>
+          </button>
+          <button
+            onClick={() => setView('stats')}
+            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
+              view === 'stats' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <CalendarIcon className="w-6 h-6" style={{ strokeWidth: view === 'stats' ? 2.5 : 2 }} />
+            <span className={`text-xs font-medium ${view === 'stats' ? 'font-bold' : ''}`}>Stats</span>
           </button>
           <button
             onClick={() => setView('prs-feed')}
