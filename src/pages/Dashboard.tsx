@@ -19,6 +19,8 @@ import {
   Target,
   Zap,
   Award,
+  Share2,
+  X,
 } from 'lucide-react';
 import type { Uebungen, PrEintraege } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -66,6 +68,17 @@ interface PRAnalysis {
     e1rm: number;
     volume: number;
   };
+}
+
+interface ShareData {
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  sets: number;
+  e1rm: number;
+  date: string;
+  isPR?: boolean;
+  totalPRs?: number;
 }
 
 // === HELPER FUNCTIONS ===
@@ -134,6 +147,8 @@ export default function Dashboard() {
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [showConfetti, setShowConfetti] = useState(false);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
+  const [shareData, setShareData] = useState<ShareData | null>(null);
 
   const [formData, setFormData] = useState<PRFormData>({
     exercise_id: '',
@@ -425,6 +440,20 @@ export default function Dashboard() {
     setDayDetailOpen(true);
   }
 
+  function openShareCard(pr: PrEintraege, exerciseName: string, totalPRs?: number, isPR?: boolean) {
+    setShareData({
+      exerciseName,
+      weight: pr.fields.weight_kg || 0,
+      reps: pr.fields.reps || 0,
+      sets: pr.fields.sets || 1,
+      e1rm: calculateE1RM(pr.fields.weight_kg, pr.fields.reps),
+      date: pr.fields.date || '',
+      isPR,
+      totalPRs,
+    });
+    setShareCardOpen(true);
+  }
+
   // Filtered exercises for search
   const filteredExercises = exercises.filter((ex) =>
     ex.fields.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -679,14 +708,25 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* CTA */}
-          <Button
-            onClick={() => openPRSheet(selectedExercise.record_id)}
-            className="w-full h-12 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-medium rounded-[var(--radius-button)] press-feedback glow-accent"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            PR hinzufügen
-          </Button>
+          {/* CTA Buttons */}
+          <div className="flex gap-3">
+            <Button
+              onClick={() => openPRSheet(selectedExercise.record_id)}
+              className="flex-1 h-12 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-medium rounded-[var(--radius-button)] press-feedback glow-accent"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              PR hinzufügen
+            </Button>
+            {selectedExercise.lastPR && (
+              <Button
+                onClick={() => openShareCard(selectedExercise.lastPR!, selectedExercise.fields.name || '', selectedExercise.prs.length)}
+                variant="outline"
+                className="h-12 px-4 border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent)]/10 rounded-[var(--radius-button)] press-feedback"
+              >
+                <Share2 className="w-5 h-5" />
+              </Button>
+            )}
+          </div>
         </section>
 
         {/* Progress Charts */}
@@ -815,11 +855,22 @@ export default function Dashboard() {
                       </span>
                       <span className="text-sm text-[var(--text-muted)]">kg</span>
                     </div>
-                    {pr.fields.date && (
-                      <div className="text-xs text-[var(--text-dim)] text-right">
-                        {format(new Date(pr.fields.date), 'dd. MMM yyyy', { locale: de })}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {pr.fields.date && (
+                        <div className="text-xs text-[var(--text-dim)] text-right">
+                          {format(new Date(pr.fields.date), 'dd. MMM yyyy', { locale: de })}
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openShareCard(pr, selectedExercise.fields.name || '');
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--surface-2)] transition-colors"
+                      >
+                        <Share2 className="w-4 h-4 text-[var(--text-dim)]" />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
                     <span>{pr.fields.reps} reps × {pr.fields.sets} sets</span>
@@ -1305,6 +1356,105 @@ export default function Dashboard() {
               <span className="text-2xl">{['🎉', '💪', '🔥', '⭐', '🏆'][Math.floor(Math.random() * 5)]}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Share Card Overlay - Instagram Story Format */}
+      {shareCardOpen && shareData && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
+          {/* Close Button */}
+          <button
+            onClick={() => setShareCardOpen(false)}
+            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors z-10"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+
+          {/* Hint */}
+          <div className="absolute top-4 left-4 text-white/60 text-sm">
+            Screenshot für Story
+          </div>
+
+          {/* Share Card - 9:16 Aspect Ratio */}
+          <div
+            className="w-full max-w-[320px] aspect-[9/16] rounded-[24px] overflow-hidden relative"
+            style={{
+              background: 'linear-gradient(165deg, #1a1a24 0%, #0a0a0f 50%, #141419 100%)',
+              boxShadow: '0 0 60px rgba(255, 143, 168, 0.2), 0 0 120px rgba(255, 143, 168, 0.1)',
+            }}
+          >
+            {/* Decorative Elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent)]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-[var(--accent)]/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
+
+            {/* Content */}
+            <div className="relative h-full flex flex-col p-6">
+              {/* Top: PR Badge */}
+              {shareData.isPR && (
+                <div className="flex justify-center mb-4">
+                  <div className="px-4 py-2 rounded-full bg-[var(--accent)]/20 border border-[var(--accent)]/40 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-[var(--accent)]" />
+                    <span className="text-sm font-bold text-[var(--accent)]">NEW PR</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Exercise Name */}
+              <div className="text-center mt-auto mb-6">
+                <h2 className="font-display text-2xl font-bold text-white/90 mb-1 leading-tight">
+                  {shareData.exerciseName}
+                </h2>
+                <p className="text-sm text-white/40">
+                  {shareData.date && format(new Date(shareData.date), 'dd. MMMM yyyy', { locale: de })}
+                </p>
+              </div>
+
+              {/* Main Stats */}
+              <div className="text-center mb-8">
+                <div className="flex items-baseline justify-center gap-2 mb-2">
+                  <span className="font-display text-7xl font-bold text-[var(--accent)]" style={{ textShadow: '0 0 40px rgba(255, 143, 168, 0.5)' }}>
+                    {shareData.weight}
+                  </span>
+                  <span className="text-2xl text-white/60">kg</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-xl text-white/80">
+                  <span className="font-display font-semibold">{shareData.reps}</span>
+                  <span className="text-white/40">reps</span>
+                  <span className="text-white/20">×</span>
+                  <span className="font-display font-semibold">{shareData.sets}</span>
+                  <span className="text-white/40">sets</span>
+                </div>
+              </div>
+
+              {/* e1RM Highlight */}
+              <div className="flex justify-center mb-auto">
+                <div className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="text-center">
+                    <p className="text-xs text-white/40 mb-1">Estimated 1RM</p>
+                    <p className="font-display text-3xl font-bold text-white">
+                      {shareData.e1rm} <span className="text-lg text-white/60">kg</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total PRs Badge */}
+              {shareData.totalPRs && shareData.totalPRs > 1 && (
+                <div className="flex justify-center mt-6">
+                  <div className="flex items-center gap-2 text-white/40 text-sm">
+                    <Award className="w-4 h-4" />
+                    <span>{shareData.totalPRs} PRs total</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Branding */}
+              <div className="mt-auto pt-6 flex items-center justify-center gap-2 text-white/30">
+                <Dumbbell className="w-4 h-4" />
+                <span className="text-xs font-medium tracking-wider">PR TRACKER</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
