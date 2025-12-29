@@ -3,7 +3,6 @@ import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, 
 import { de } from 'date-fns/locale';
 import {
   TrendingUp,
-  TrendingDown,
   Plus,
   Search,
   Dumbbell,
@@ -15,7 +14,6 @@ import {
   Trophy,
   History,
   Home,
-  BarChart3,
   StickyNote,
   Flame,
   Target,
@@ -35,10 +33,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 // === TYPES ===
-type ViewType = 'home' | 'exercise-detail' | 'prs-feed' | 'stats';
+type ViewType = 'home' | 'exercise-detail' | 'stats';
 
 interface ExerciseWithPRs extends Uebungen {
   prs: PrEintraege[];
@@ -135,6 +133,7 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const [formData, setFormData] = useState<PRFormData>({
     exercise_id: '',
@@ -388,12 +387,15 @@ export default function Dashboard() {
         if (prAnalysis.isRepPR) prTypes.push('Rep-PR');
 
         if (prTypes.length > 0) {
+          // Trigger confetti!
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 3000);
           toast.success(`Neuer ${prTypes.join(' + ')}! 🎉`);
         } else {
-          toast.success('PR erfolgreich eingetragen!');
+          toast.success('Eingetragen!');
         }
       } else {
-        toast.success('PR erfolgreich eingetragen!');
+        toast.success('Eingetragen!');
       }
 
       setSheetOpen(false);
@@ -819,13 +821,8 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-[var(--text-muted)]">
-                      {pr.fields.reps} reps × {pr.fields.sets} sets
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
-                    </Badge>
+                  <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
+                    <span>{pr.fields.reps} reps × {pr.fields.sets} sets</span>
                   </div>
                   {pr.fields.note && (
                     <div className="mt-3 pt-3 border-t border-[var(--border-dim)] text-sm text-[var(--text-muted)]">
@@ -1020,83 +1017,6 @@ export default function Dashboard() {
     );
   }
 
-  // PRs Feed View
-  function PRsFeedView() {
-    const allPRs = exercises.flatMap((ex) =>
-      ex.prs.map((pr) => ({
-        ...pr,
-        exerciseName: ex.fields.name || 'Unbekannt',
-        exerciseId: ex.record_id,
-      }))
-    ).sort((a, b) => {
-      const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
-      const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
-      return dateB - dateA;
-    });
-
-    return (
-      <div className="flex-1 overflow-auto pb-20">
-        <section className="px-4 pt-6 pb-6">
-          <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Alle PRs ({allPRs.length})
-          </h2>
-
-          {allPRs.length === 0 ? (
-            <div className="text-center py-12 text-[var(--text-muted)]">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--surface-1)] flex items-center justify-center">
-                <BarChart3 className="w-6 h-6" />
-              </div>
-              <p className="mb-4">Noch keine PRs eingetragen</p>
-              <Button onClick={() => openPRSheet()} variant="outline" className="press-feedback">
-                Ersten PR eintragen
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2 stagger-fade-in">
-              {allPRs.map((pr, idx) => (
-                <div
-                  key={pr.record_id}
-                  onClick={() => {
-                    const exercise = exercises.find((ex) => ex.record_id === pr.exerciseId);
-                    if (exercise) handleExerciseClick(exercise);
-                  }}
-                  className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--surface-2)] transition-all cursor-pointer press-feedback"
-                  style={{
-                    animation: 'fade-in-stagger 0.4s ease-out forwards',
-                    animationDelay: `${idx * 40}ms`,
-                    opacity: 0,
-                  }}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-display font-bold text-base">{pr.exerciseName}</h3>
-                    {pr.fields.date && (
-                      <span className="text-xs text-[var(--text-dim)]">
-                        {format(new Date(pr.fields.date), 'dd.MM.yy', { locale: de })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-display text-2xl font-bold text-[var(--accent)]">
-                      {pr.fields.weight_kg}
-                    </span>
-                    <span className="text-sm text-[var(--text-muted)]">kg</span>
-                    <span className="text-[var(--text-muted)] mx-1">×</span>
-                    <span className="font-display text-lg font-semibold">{pr.fields.reps}</span>
-                    <span className="text-sm text-[var(--text-muted)]">reps</span>
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    );
-  }
-
   // === RENDER ===
   if (loading) {
     return (
@@ -1117,7 +1037,6 @@ export default function Dashboard() {
       {view === 'home' && <HomeView />}
       {view === 'exercise-detail' && <ExerciseDetailView />}
       {view === 'stats' && <StatsView />}
-      {view === 'prs-feed' && <PRsFeedView />}
 
       {/* PR Add Sheet with "Heute vs. Letztes Mal" */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -1151,29 +1070,6 @@ export default function Dashboard() {
                 </Select>
               </div>
 
-              {/* "Heute vs. Letztes Mal" - Last PR Display */}
-              {lastPRForExercise && (
-                <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-2)] border border-[var(--border)]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <History className="w-4 h-4 text-[var(--text-muted)]" />
-                    <span className="text-sm text-[var(--text-muted)]">Letztes Top-Set</span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-display text-2xl font-bold">
-                      {lastPRForExercise.fields.weight_kg}kg
-                    </span>
-                    <span className="text-[var(--text-muted)]">×</span>
-                    <span className="font-display text-xl font-semibold">
-                      {lastPRForExercise.fields.reps}
-                    </span>
-                    <span className="text-sm text-[var(--text-dim)] ml-2">
-                      {lastPRForExercise.fields.date &&
-                        format(new Date(lastPRForExercise.fields.date), 'dd.MM.yy', { locale: de })}
-                    </span>
-                  </div>
-                </div>
-              )}
-
               {/* Weight Input */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-[var(--text-muted)]">Gewicht (kg)</Label>
@@ -1187,27 +1083,41 @@ export default function Dashboard() {
                 />
               </div>
 
-              {/* Live Comparison */}
-              {liveComparison && (
-                <div className="p-4 rounded-[var(--radius)] bg-gradient-to-r from-[var(--accent)]/10 to-transparent border border-[var(--accent)]/30">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Zap className="w-4 h-4 text-[var(--accent)]" />
-                    <span className="text-sm font-medium text-[var(--accent)]">Heute vs. Letztes Mal</span>
-                  </div>
-                  <div className="flex flex-wrap gap-3 text-sm">
-                    <span className={liveComparison.weightDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {liveComparison.weightDiff >= 0 ? '+' : ''}{liveComparison.weightDiff}kg
-                    </span>
-                    <span className={liveComparison.repsDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
-                      {liveComparison.repsDiff >= 0 ? '+' : ''}{liveComparison.repsDiff} reps
-                    </span>
-                    <span className="text-[var(--text-muted)]">
-                      e1RM: {liveComparison.lastE1rm} → {liveComparison.newE1rm}
-                      <span className={liveComparison.e1rmDiff >= 0 ? 'text-green-400 ml-1' : 'text-red-400 ml-1'}>
-                        ({liveComparison.e1rmDiff >= 0 ? '+' : ''}{liveComparison.e1rmDiff})
+              {/* Comparison: Shows last PR or live diff */}
+              {lastPRForExercise && (
+                <div className={`p-4 rounded-[var(--radius)] border ${liveComparison ? 'bg-gradient-to-r from-[var(--accent)]/10 to-transparent border-[var(--accent)]/30' : 'bg-[var(--surface-2)] border-[var(--border)]'}`}>
+                  {liveComparison ? (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Zap className="w-4 h-4 text-[var(--accent)]" />
+                        <span className="text-sm font-medium text-[var(--accent)]">vs. Letztes Mal</span>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <span className={liveComparison.weightDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {liveComparison.weightDiff >= 0 ? '+' : ''}{liveComparison.weightDiff}kg
+                        </span>
+                        <span className={liveComparison.repsDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {liveComparison.repsDiff >= 0 ? '+' : ''}{liveComparison.repsDiff} reps
+                        </span>
+                        <span className="text-[var(--text-muted)]">
+                          e1RM: {liveComparison.lastE1rm} → {liveComparison.newE1rm}
+                          <span className={liveComparison.e1rmDiff >= 0 ? 'text-green-400 ml-1' : 'text-red-400 ml-1'}>
+                            ({liveComparison.e1rmDiff >= 0 ? '+' : ''}{liveComparison.e1rmDiff})
+                          </span>
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 mb-1">
+                        <History className="w-4 h-4 text-[var(--text-muted)]" />
+                        <span className="text-xs text-[var(--text-muted)]">Letztes Mal</span>
+                      </div>
+                      <span className="font-display text-lg font-bold">
+                        {lastPRForExercise.fields.weight_kg}kg × {lastPRForExercise.fields.reps}
                       </span>
-                    </span>
-                  </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1342,9 +1252,6 @@ export default function Dashboard() {
                     <span className="text-[var(--text-muted)] mx-1">×</span>
                     <span className="font-display text-lg font-semibold">{pr.fields.reps}</span>
                     <span className="text-sm text-[var(--text-muted)]">reps</span>
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      e1RM: {calculateE1RM(pr.fields.weight_kg, pr.fields.reps)}
-                    </Badge>
                   </div>
                 </div>
               ))}
@@ -1353,7 +1260,7 @@ export default function Dashboard() {
         </SheetContent>
       </Sheet>
 
-      {/* Bottom Tab Bar - 3 Tabs */}
+      {/* Bottom Tab Bar - 2 Tabs */}
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-dim)] bg-[var(--surface-2)]/95 backdrop-blur-lg">
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
           <button
@@ -1378,17 +1285,28 @@ export default function Dashboard() {
             <CalendarIcon className="w-6 h-6" style={{ strokeWidth: view === 'stats' ? 2.5 : 2 }} />
             <span className={`text-xs font-medium ${view === 'stats' ? 'font-bold' : ''}`}>Stats</span>
           </button>
-          <button
-            onClick={() => setView('prs-feed')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
-              view === 'prs-feed' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-            }`}
-          >
-            <BarChart3 className="w-6 h-6" style={{ strokeWidth: view === 'prs-feed' ? 2.5 : 2 }} />
-            <span className={`text-xs font-medium ${view === 'prs-feed' ? 'font-bold' : ''}`}>PRs</span>
-          </button>
         </div>
       </div>
+
+      {/* Confetti Animation */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+          {[...Array(50)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute animate-confetti"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: '-20px',
+                animationDelay: `${Math.random() * 0.5}s`,
+                animationDuration: `${2 + Math.random() * 2}s`,
+              }}
+            >
+              <span className="text-2xl">{['🎉', '💪', '🔥', '⭐', '🏆'][Math.floor(Math.random() * 5)]}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
