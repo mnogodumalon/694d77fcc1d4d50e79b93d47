@@ -128,6 +128,8 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [confettiKey, setConfettiKey] = useState(0);
   const [shareCardOpen, setShareCardOpen] = useState(false);
   const [shareData, setShareData] = useState<ShareData | null>(null);
 
@@ -435,6 +437,9 @@ export default function Dashboard() {
         if (prAnalysis.isRepPR) prTypes.push('Rep-PR');
 
         if (prTypes.length > 0) {
+          // Trigger confetti with new key to restart animation
+          setConfettiKey(prev => prev + 1);
+          setShowConfetti(true);
           toast.success(`Neuer ${prTypes.join(' + ')}! 🎉`);
         } else {
           toast.success('Eingetragen!');
@@ -1320,6 +1325,29 @@ export default function Dashboard() {
         </div>
       </div>
 
+
+      {/* Confetti Animation - CSS only, no state change needed to hide */}
+      {showConfetti && (
+        <div 
+          key={confettiKey}
+          className="fixed inset-0 pointer-events-none z-50 overflow-hidden animate-confetti-container"
+        >
+          {[...Array(50)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute animate-confetti"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: '-20px',
+                animationDelay: `${Math.random() * 0.5}s`,
+                animationDuration: `${2 + Math.random() * 2}s`,
+              }}
+            >
+              <span className="text-2xl">{['🎉', '💪', '🔥', '⭐', '🏆'][Math.floor(Math.random() * 5)]}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Share Card Overlay - Fullscreen Instagram Story */}
       {shareCardOpen && shareData && (
