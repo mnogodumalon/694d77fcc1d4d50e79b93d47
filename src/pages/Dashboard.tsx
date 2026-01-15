@@ -189,12 +189,12 @@ export default function Dashboard() {
 
       setExercises(exercisesWithPRs);
 
-      // Recent PRs for Hero Carousel
+      // Recent PRs for Hero Carousel - sort by creation time (when added to system)
       const recent = prEintraege
         .sort((a, b) => {
-          const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
-          const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
-          return dateB - dateA;
+          const createdA = a.createdat ? new Date(a.createdat).getTime() : 0;
+          const createdB = b.createdat ? new Date(b.createdat).getTime() : 0;
+          return createdB - createdA;
         })
         .slice(0, 10)
         .map((pr) => {
