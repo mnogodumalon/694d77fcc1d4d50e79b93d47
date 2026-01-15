@@ -495,7 +495,7 @@ export default function Dashboard() {
       setTimerSeconds(120);
       setTimerInitial(120);
       setTimerRunning(false);
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Error creating PR:', error);
       toast.error('Fehler beim Speichern');
