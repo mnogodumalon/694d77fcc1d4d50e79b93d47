@@ -16,7 +16,6 @@ import {
   Home,
   StickyNote,
   Flame,
-  Target,
   Zap,
   Award,
   Share2,
@@ -48,7 +47,6 @@ interface ExerciseWithPRs extends Uebungen {
   prs: PrEintraege[];
   bestKg?: number;
   bestReps?: number;
-  bestE1rm?: number;
   lastPR?: PrEintraege;
 }
 
@@ -64,12 +62,10 @@ interface PRFormData {
 interface PRAnalysis {
   isWeightPR: boolean;
   isRepPR: boolean;
-  isE1rmPR: boolean;
   isVolumePR: boolean;
   previousBest: {
     weight: number;
     reps: number;
-    e1rm: number;
     volume: number;
   };
 }
@@ -79,20 +75,12 @@ interface ShareData {
   weight: number;
   reps: number;
   sets: number;
-  e1rm: number;
   date: string;
   isPR?: boolean;
   totalPRs?: number;
 }
 
 // === HELPER FUNCTIONS ===
-
-// e1RM Berechnung (Epley Formel)
-function calculateE1RM(weight: number | undefined, reps: number | undefined): number {
-  if (!weight || !reps) return 0;
-  if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30));
-}
 
 // PR-Analyse
 function analyzePR(
@@ -104,16 +92,12 @@ function analyzePR(
     return {
       isWeightPR: true,
       isRepPR: true,
-      isE1rmPR: true,
       isVolumePR: true,
-      previousBest: { weight: 0, reps: 0, e1rm: 0, volume: 0 },
+      previousBest: { weight: 0, reps: 0, volume: 0 },
     };
   }
 
   const maxWeight = Math.max(...previousEntries.map((e) => e.fields.weight_kg || 0));
-  const maxE1rm = Math.max(
-    ...previousEntries.map((e) => calculateE1RM(e.fields.weight_kg, e.fields.reps))
-  );
   const maxVolume = Math.max(
     ...previousEntries.map((e) => (e.fields.weight_kg || 0) * (e.fields.reps || 0))
   );
@@ -124,15 +108,13 @@ function analyzePR(
     ? Math.max(...sameWeight.map((e) => e.fields.reps || 0))
     : 0;
 
-  const newE1rm = calculateE1RM(newWeight, newReps);
   const newVolume = newWeight * newReps;
 
   return {
     isWeightPR: newWeight > maxWeight,
     isRepPR: newReps > maxRepsAtWeight && sameWeight.length > 0,
-    isE1rmPR: newE1rm > maxE1rm,
     isVolumePR: newVolume > maxVolume,
-    previousBest: { weight: maxWeight, reps: maxRepsAtWeight, e1rm: maxE1rm, volume: maxVolume },
+    previousBest: { weight: maxWeight, reps: maxRepsAtWeight, volume: maxVolume },
   };
 }
 
@@ -235,10 +217,6 @@ export default function Dashboard() {
 
         const bestKg = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.weight_kg || 0), 0);
         const bestReps = exercisePRs.reduce((max, pr) => Math.max(max, pr.fields.reps || 0), 0);
-        const bestE1rm = exercisePRs.reduce(
-          (max, pr) => Math.max(max, calculateE1RM(pr.fields.weight_kg, pr.fields.reps)),
-          0
-        );
         const lastPR = exercisePRs[0];
 
         return {
@@ -246,7 +224,6 @@ export default function Dashboard() {
           prs: exercisePRs,
           bestKg: bestKg > 0 ? bestKg : undefined,
           bestReps: bestReps > 0 ? bestReps : undefined,
-          bestE1rm: bestE1rm > 0 ? bestE1rm : undefined,
           lastPR,
         };
       });
@@ -308,15 +285,10 @@ export default function Dashboard() {
 
     const lastWeight = lastPRForExercise.fields.weight_kg || 0;
     const lastReps = lastPRForExercise.fields.reps || 0;
-    const lastE1rm = calculateE1RM(lastWeight, lastReps);
-    const newE1rm = calculateE1RM(newWeight, newReps);
 
     return {
       weightDiff: newWeight - lastWeight,
       repsDiff: newReps - lastReps,
-      e1rmDiff: newE1rm - lastE1rm,
-      lastE1rm,
-      newE1rm,
     };
   }, [lastPRForExercise, formData.weight_kg, formData.reps]);
 
@@ -335,7 +307,7 @@ export default function Dashboard() {
     const weeksActive = Math.max(1, Math.ceil(daysSinceFirst / 7));
     const sessionsPerWeek = (totalSessions / weeksActive).toFixed(1);
 
-    // Top 3-5 exercises by frequency (for Strength Index)
+    // Top 3-5 exercises by frequency
     const exerciseFrequency: Record<string, number> = {};
     allPrEntries.forEach((pr) => {
       const exId = extractRecordId(pr.fields.exercise_id);
@@ -351,15 +323,55 @@ export default function Dashboard() {
 
     const topExercises = exercises.filter((ex) => topExerciseIds.includes(ex.record_id));
 
-    // Strength Index (average best e1RM of top exercises)
-    const strengthIndex =
-      topExercises.length > 0
-        ? Math.round(
-            topExercises.reduce((sum, ex) => sum + (ex.bestE1rm || 0), 0) / topExercises.length
-          )
-        : 0;
+    // Strength Gain % - Compare best weight from 30 days ago to current
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Group entries by exercise
+    const entriesByExercise: Record<string, PrEintraege[]> = {};
+    allPrEntries.forEach((pr) => {
+      const exId = extractRecordId(pr.fields.exercise_id);
+      if (exId) {
+        if (!entriesByExercise[exId]) entriesByExercise[exId] = [];
+        entriesByExercise[exId].push(pr);
+      }
+    });
+    
+    // Calculate strength gain for each exercise that has entries both before and after 30 days ago
+    let totalGainPercent = 0;
+    let exercisesWithGain = 0;
+    
+    Object.values(entriesByExercise).forEach((entries) => {
+      // Sort by date
+      const sorted = entries.sort((a, b) => {
+        const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
+        const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
+        return dateA - dateB;
+      });
+      
+      // Find entries before 30 days ago and current/recent entries
+      const oldEntries = sorted.filter(e => e.fields.date && new Date(e.fields.date) <= thirtyDaysAgo);
+      const recentEntries = sorted.filter(e => e.fields.date && new Date(e.fields.date) > thirtyDaysAgo);
+      
+      if (oldEntries.length > 0 && recentEntries.length > 0) {
+        // Best weight from old entries (baseline)
+        const oldBestWeight = Math.max(...oldEntries.map(e => e.fields.weight_kg || 0));
+        // Best weight from recent entries
+        const newBestWeight = Math.max(...recentEntries.map(e => e.fields.weight_kg || 0));
+        
+        if (oldBestWeight > 0) {
+          const gainPercent = ((newBestWeight - oldBestWeight) / oldBestWeight) * 100;
+          totalGainPercent += gainPercent;
+          exercisesWithGain++;
+        }
+      }
+    });
+    
+    const strengthGainPercent = exercisesWithGain > 0 
+      ? Math.round(totalGainPercent / exercisesWithGain * 10) / 10 
+      : 0;
 
-    // Consistency streak (weeks with ≥2 sessions)
+    // Consistency streak - count consecutive weeks with ≥1 session from current week backwards
     const weeklyTraining: Record<number, number> = {};
     uniqueDates.forEach((dateStr) => {
       if (dateStr) {
@@ -371,22 +383,48 @@ export default function Dashboard() {
       }
     });
 
+    // Get current week key
+    const currentWeekNum = getWeek(now, { weekStartsOn: 1 });
+    const currentYear = now.getFullYear();
+    let currentWeekKey = currentYear * 100 + currentWeekNum;
+    
+    // Count consecutive weeks backwards from current week
     let currentStreak = 0;
-    const sortedWeeks = Object.keys(weeklyTraining)
-      .map(Number)
-      .sort((a, b) => b - a);
-    for (const week of sortedWeeks) {
-      if (weeklyTraining[week] >= 2) {
-        currentStreak++;
+    
+    // Allow current week to be empty (week just started) - check if last week had training
+    const hasCurrentWeekTraining = weeklyTraining[currentWeekKey] >= 1;
+    if (!hasCurrentWeekTraining) {
+      // Check from last week
+      if (currentWeekNum === 1) {
+        currentWeekKey = (currentYear - 1) * 100 + 52;
       } else {
-        break;
+        currentWeekKey = currentYear * 100 + (currentWeekNum - 1);
+      }
+    }
+    
+    // Count backwards
+    let checkYear = Math.floor(currentWeekKey / 100);
+    let checkWeek = currentWeekKey % 100;
+    
+    for (let i = 0; i < 52; i++) { // Max 1 year
+      const key = checkYear * 100 + checkWeek;
+      if (weeklyTraining[key] >= 1) {
+        currentStreak++;
+        // Move to previous week
+        checkWeek--;
+        if (checkWeek < 1) {
+          checkWeek = 52;
+          checkYear--;
+        }
+      } else {
+        break; // Streak broken
       }
     }
 
     return {
       totalSessions,
       sessionsPerWeek,
-      strengthIndex,
+      strengthGainPercent,
       currentStreak,
       topExercises,
     };
@@ -441,7 +479,6 @@ export default function Dashboard() {
       if (prAnalysis) {
         const prTypes: string[] = [];
         if (prAnalysis.isWeightPR) prTypes.push('Gewichts-PR');
-        if (prAnalysis.isE1rmPR) prTypes.push('e1RM-PR');
         if (prAnalysis.isVolumePR) prTypes.push('Volumen-PR');
         if (prAnalysis.isRepPR) prTypes.push('Rep-PR');
 
@@ -495,7 +532,6 @@ export default function Dashboard() {
       weight: pr.fields.weight_kg || 0,
       reps: pr.fields.reps || 0,
       sets: pr.fields.sets || 1,
-      e1rm: calculateE1RM(pr.fields.weight_kg, pr.fields.reps),
       date: pr.fields.date || '',
       isPR,
       totalPRs,
@@ -701,14 +737,7 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {ex.prs.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {ex.prs.length} PRs
-                      </Badge>
-                    )}
-                    <ChevronRight className="w-5 h-5 text-[var(--text-dim)]" />
-                  </div>
+                  <ChevronRight className="w-5 h-5 text-[var(--text-dim)]" />
                 </div>
               ))
             )}
@@ -732,7 +761,6 @@ export default function Dashboard() {
           fullDate: pr.fields.date,
           weight: pr.fields.weight_kg || 0,
           reps: pr.fields.reps || 0,
-          e1rm: calculateE1RM(pr.fields.weight_kg, pr.fields.reps),
           volume: (pr.fields.weight_kg || 0) * (pr.fields.reps || 0),
         }));
     }, [selectedExercise.prs]);
@@ -755,17 +783,6 @@ export default function Dashboard() {
                     {selectedExercise.bestKg}
                   </span>{' '}
                   <span className="text-[var(--text-muted)]">kg</span>
-                </span>
-              </div>
-            )}
-            {selectedExercise.bestE1rm && (
-              <div className="px-4 py-2 rounded-[var(--radius-chip)] bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-2">
-                <Target className="w-4 h-4 text-[var(--accent)]" />
-                <span className="text-sm font-medium">
-                  <span className="font-display font-bold text-[var(--accent)]">
-                    {selectedExercise.bestE1rm}
-                  </span>{' '}
-                  <span className="text-[var(--text-muted)]">e1RM</span>
                 </span>
               </div>
             )}
@@ -809,9 +826,8 @@ export default function Dashboard() {
               Progress
             </h2>
             <Tabs defaultValue="weight" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-[var(--surface-1)] rounded-[var(--radius-button)] p-1 h-10">
+              <TabsList className="grid w-full grid-cols-2 bg-[var(--surface-1)] rounded-[var(--radius-button)] p-1 h-10">
                 <TabsTrigger value="weight" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">Gewicht</TabsTrigger>
-                <TabsTrigger value="e1rm" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">e1RM</TabsTrigger>
                 <TabsTrigger value="volume" className="text-xs rounded-[var(--radius-button)] data-[state=active]:bg-[var(--surface-2)]">Volumen</TabsTrigger>
               </TabsList>
               <TabsContent value="weight" className="mt-4">
@@ -833,29 +849,6 @@ export default function Dashboard() {
                         formatter={(value: number) => [`${value} kg`, 'Gewicht']}
                       />
                       <Area type="monotone" dataKey="weight" stroke="#ff8fa8" strokeWidth={2} fill="url(#colorWeight)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </TabsContent>
-              <TabsContent value="e1rm" className="mt-4">
-                <div className="h-[200px] w-full bg-[var(--surface-1)] rounded-[var(--radius)] p-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="colorE1rm" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ff8fa8" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#ff8fa8" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="date" stroke="#727280" fontSize={10} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#727280" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#1c1c24', border: '1px solid #2a2a35', borderRadius: '8px' }}
-                        labelStyle={{ color: '#e8e8f0' }}
-                        itemStyle={{ color: '#ff8fa8' }}
-                        formatter={(value: number) => [`${value} kg`, 'e1RM']}
-                      />
-                      <Area type="monotone" dataKey="e1rm" stroke="#ff8fa8" strokeWidth={2} fill="url(#colorE1rm)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -980,13 +973,13 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-3">
               <div className="p-4 rounded-[var(--radius)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] border border-[var(--border)]">
                 <div className="flex items-center gap-2 mb-2">
-                  <Target className="w-4 h-4 text-[var(--accent)]" />
-                  <span className="text-xs text-[var(--text-muted)]">Strength Index</span>
+                  <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
+                  <span className="text-xs text-[var(--text-muted)]">30-Tage Stärke</span>
                 </div>
-                <span className="font-display text-3xl font-bold text-[var(--accent)]">
-                  {statsData.strengthIndex}
+                <span className={`font-display text-3xl font-bold ${statsData.strengthGainPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {statsData.strengthGainPercent >= 0 ? '+' : ''}{statsData.strengthGainPercent}
                 </span>
-                <span className="text-sm text-[var(--text-muted)] ml-1">kg</span>
+                <span className="text-sm text-[var(--text-muted)] ml-1">%</span>
               </div>
               <div className="p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)]">
                 <div className="flex items-center gap-2 mb-2">
@@ -1112,7 +1105,7 @@ export default function Dashboard() {
           <section className="px-4 pb-6 stagger-fade-in stagger-delay-2">
             <h2 className="text-sm font-medium text-[var(--text-muted)] mb-3 flex items-center gap-2">
               <Award className="w-4 h-4" />
-              Top Übungen (Strength Index)
+              Top Übungen
             </h2>
             <div className="space-y-2">
               {statsData.topExercises.map((ex, idx) => (
@@ -1128,8 +1121,8 @@ export default function Dashboard() {
                     <span className="font-medium">{ex.fields.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="font-display font-bold text-[var(--accent)]">{ex.bestE1rm}</span>
-                    <span className="text-xs text-[var(--text-muted)] ml-1">e1RM</span>
+                    <span className="font-display font-bold text-[var(--accent)]">{ex.bestKg}</span>
+                    <span className="text-xs text-[var(--text-muted)] ml-1">kg</span>
                   </div>
                 </div>
               ))}
@@ -1221,12 +1214,6 @@ export default function Dashboard() {
                         </span>
                         <span className={liveComparison.repsDiff >= 0 ? 'text-green-400' : 'text-red-400'}>
                           {liveComparison.repsDiff >= 0 ? '+' : ''}{liveComparison.repsDiff} reps
-                        </span>
-                        <span className="text-[var(--text-muted)]">
-                          e1RM: {liveComparison.lastE1rm} → {liveComparison.newE1rm}
-                          <span className={liveComparison.e1rmDiff >= 0 ? 'text-green-400 ml-1' : 'text-red-400 ml-1'}>
-                            ({liveComparison.e1rmDiff >= 0 ? '+' : ''}{liveComparison.e1rmDiff})
-                          </span>
                         </span>
                       </div>
                     </>
@@ -1491,18 +1478,6 @@ export default function Dashboard() {
                 <span className="text-white/20">×</span>
                 <span className="font-display font-semibold">{shareData.sets}</span>
                 <span className="text-white/40">sets</span>
-              </div>
-            </div>
-
-            {/* e1RM Highlight */}
-            <div className="flex justify-center mb-auto">
-              <div className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div className="text-center">
-                  <p className="text-sm text-white/40 mb-1 tracking-wide">Estimated 1RM</p>
-                  <p className="font-display text-4xl font-bold text-white">
-                    {shareData.e1rm} <span className="text-xl text-white/50">kg</span>
-                  </p>
-                </div>
               </div>
             </div>
 
