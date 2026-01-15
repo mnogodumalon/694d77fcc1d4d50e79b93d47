@@ -892,6 +892,17 @@ export default function Dashboard() {
       days.push(new Date(days[days.length - 1].getTime() + 86400000));
     }
 
+    // Calculate sessions for the displayed month
+    const monthSessions = useMemo(() => {
+      const monthStartStr = format(monthStart, 'yyyy-MM');
+      const uniqueDatesInMonth = new Set(
+        allPrEntries
+          .map((pr) => pr.fields.date?.split('T')[0])
+          .filter((date) => date && date.startsWith(monthStartStr))
+      );
+      return uniqueDatesInMonth.size;
+    }, [allPrEntries, monthStart]);
+
     return (
       <div className="flex-1 overflow-auto pb-20">
         {/* Stats Overview */}
@@ -937,7 +948,7 @@ export default function Dashboard() {
 
         {/* Calendar Heatmap */}
         <section className="px-4 pt-4 pb-6 stagger-fade-in stagger-delay-1">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-medium text-[var(--text-muted)] flex items-center gap-2">
               <CalendarIcon className="w-4 h-4" />
               Trainings-Kalender
@@ -959,6 +970,9 @@ export default function Dashboard() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+          </div>
+          <div className="text-xs text-[var(--text-dim)] mb-3">
+            {monthSessions} {monthSessions === 1 ? 'Session' : 'Sessions'} in {format(calendarMonth, 'MMMM', { locale: de })}
           </div>
 
           {/* Weekday headers */}
