@@ -323,9 +323,8 @@ export default function Dashboard() {
 
     const topExercises = exercises.filter((ex) => topExerciseIds.includes(ex.record_id));
 
-    // Strength Gain % - Compare best weight from 30 days ago to current
+    // Strength Gain % - Compare first PR weight to current best weight for each exercise
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     
     // Group entries by exercise
     const entriesByExercise: Record<string, PrEintraege[]> = {};
@@ -337,33 +336,29 @@ export default function Dashboard() {
       }
     });
     
-    // Calculate strength gain for each exercise that has entries both before and after 30 days ago
+    // Calculate strength gain for each exercise (first PR vs current best)
     let totalGainPercent = 0;
     let exercisesWithGain = 0;
     
     Object.values(entriesByExercise).forEach((entries) => {
-      // Sort by date
+      if (entries.length < 2) return; // Need at least 2 entries to compare
+      
+      // Sort by date (oldest first)
       const sorted = entries.sort((a, b) => {
         const dateA = a.fields.date ? new Date(a.fields.date).getTime() : 0;
         const dateB = b.fields.date ? new Date(b.fields.date).getTime() : 0;
         return dateA - dateB;
       });
       
-      // Find entries before 30 days ago and current/recent entries
-      const oldEntries = sorted.filter(e => e.fields.date && new Date(e.fields.date) <= thirtyDaysAgo);
-      const recentEntries = sorted.filter(e => e.fields.date && new Date(e.fields.date) > thirtyDaysAgo);
+      // First PR weight (baseline)
+      const firstWeight = sorted[0].fields.weight_kg || 0;
+      // Current best weight
+      const currentBestWeight = Math.max(...entries.map(e => e.fields.weight_kg || 0));
       
-      if (oldEntries.length > 0 && recentEntries.length > 0) {
-        // Best weight from old entries (baseline)
-        const oldBestWeight = Math.max(...oldEntries.map(e => e.fields.weight_kg || 0));
-        // Best weight from recent entries
-        const newBestWeight = Math.max(...recentEntries.map(e => e.fields.weight_kg || 0));
-        
-        if (oldBestWeight > 0) {
-          const gainPercent = ((newBestWeight - oldBestWeight) / oldBestWeight) * 100;
-          totalGainPercent += gainPercent;
-          exercisesWithGain++;
-        }
+      if (firstWeight > 0 && currentBestWeight > firstWeight) {
+        const gainPercent = ((currentBestWeight - firstWeight) / firstWeight) * 100;
+        totalGainPercent += gainPercent;
+        exercisesWithGain++;
       }
     });
     
