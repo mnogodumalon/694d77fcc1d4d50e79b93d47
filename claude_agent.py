@@ -58,10 +58,9 @@ async def main():
             
             print("[DEPLOY] ✅ Push erfolgreich!")
             
-            # Ab hier: Warte auf Dashboard und aktiviere Links
+            # Ab hier: Aktiviere Dashboard-Links
             if livingapps_api_key and appgroup_id:
                 import httpx
-                import time
                 
                 headers = {
                     "X-API-Key": livingapps_api_key,
@@ -89,25 +88,7 @@ async def main():
                     
                     dashboard_url = f"https://my.living-apps.de/github/{appgroup_id}/"
                     
-                    # 2. Warte bis Dashboard verfügbar ist
-                    print(f"[DEPLOY] ⏳ Warte auf Dashboard: {dashboard_url}")
-                    max_attempts = 180  # Max 180 Sekunden warten
-                    for attempt in range(max_attempts):
-                        try:
-                            check_resp = httpx.get(dashboard_url, timeout=5)
-                            if check_resp.status_code == 200:
-                                print(f"[DEPLOY] ✅ Dashboard ist verfügbar!")
-                                break
-                        except:
-                            pass
-                        
-                        if attempt < max_attempts - 1:
-                            time.sleep(1)
-                        else:
-                            print("[DEPLOY] ⚠️ Timeout - Dashboard nicht erreichbar")
-                            return {"content": [{"type": "text", "text": "✅ Deployment erfolgreich! Dashboard-Links konnten nicht aktiviert werden."}]}
-                    
-                    # 3. Aktiviere Dashboard-Links
+                    # Aktiviere Dashboard-Links
                     print("[DEPLOY] 🎉 Aktiviere Dashboard-Links...")
                     for app_id in app_ids:
                         try:
