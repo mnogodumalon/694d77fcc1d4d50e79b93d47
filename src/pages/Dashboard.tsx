@@ -974,7 +974,7 @@ export default function Dashboard() {
               <div className="p-4 rounded-[var(--radius)] bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-1)] border border-[var(--border)]">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
-                  <span className="text-xs text-[var(--text-muted)]">30-Tage Stärke</span>
+                  <span className="text-xs text-[var(--text-muted)]">Strength Increase</span>
                 </div>
                 <span className={`font-display text-3xl font-bold ${statsData.strengthGainPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {statsData.strengthGainPercent >= 0 ? '+' : ''}{statsData.strengthGainPercent}
