@@ -117,7 +117,7 @@ function analyzePR(
 // === MAIN COMPONENT ===
 export default function Dashboard() {
   // State Management
-  const [view, setView] = useState<ViewType>('home');
+  const [view, setView] = useState<ViewType>('stats');
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithPRs | null>(null);
   const [exercises, setExercises] = useState<ExerciseWithPRs[]>([]);
   const [allPrEntries, setAllPrEntries] = useState<PrEintraege[]>([]);
@@ -892,16 +892,6 @@ export default function Dashboard() {
       days.push(new Date(days[days.length - 1].getTime() + 86400000));
     }
 
-    // Calculate sessions for the displayed month
-    const monthSessions = useMemo(() => {
-      const monthStartStr = format(monthStart, 'yyyy-MM');
-      const uniqueDatesInMonth = new Set(
-        allPrEntries
-          .map((pr) => pr.fields.date?.split('T')[0])
-          .filter((date) => date && date.startsWith(monthStartStr))
-      );
-      return uniqueDatesInMonth.size;
-    }, [allPrEntries, monthStart]);
 
     return (
       <div className="flex-1 overflow-auto pb-20">
@@ -948,7 +938,7 @@ export default function Dashboard() {
 
         {/* Calendar Heatmap */}
         <section className="px-4 pt-4 pb-6 stagger-fade-in stagger-delay-1">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-medium text-[var(--text-muted)] flex items-center gap-2">
               <CalendarIcon className="w-4 h-4" />
               Trainings-Kalender
@@ -970,9 +960,6 @@ export default function Dashboard() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-          <div className="text-xs text-[var(--text-dim)] mb-3">
-            {monthSessions} {monthSessions === 1 ? 'Session' : 'Sessions'} in {format(calendarMonth, 'MMMM', { locale: de })}
           </div>
 
           {/* Weekday headers */}
@@ -1315,6 +1302,15 @@ export default function Dashboard() {
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--border-dim)] bg-[var(--surface-2)]/95 backdrop-blur-lg">
         <div className="flex items-center justify-around h-16 max-w-md mx-auto px-4">
           <button
+            onClick={() => setView('stats')}
+            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
+              view === 'stats' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <Home className="w-6 h-6" style={{ strokeWidth: view === 'stats' ? 2.5 : 2 }} />
+            <span className={`text-xs font-medium ${view === 'stats' ? 'font-bold' : ''}`}>Home</span>
+          </button>
+          <button
             onClick={() => setView('home')}
             className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
               view === 'home' || view === 'exercise-detail'
@@ -1322,19 +1318,10 @@ export default function Dashboard() {
                 : 'text-[var(--text-muted)] hover:text-[var(--text)]'
             }`}
           >
-            <Home className="w-6 h-6" style={{ strokeWidth: view === 'home' || view === 'exercise-detail' ? 2.5 : 2 }} />
+            <Dumbbell className="w-6 h-6" style={{ strokeWidth: view === 'home' || view === 'exercise-detail' ? 2.5 : 2 }} />
             <span className={`text-xs font-medium ${view === 'home' || view === 'exercise-detail' ? 'font-bold' : ''}`}>
-              Home
+              PRs
             </span>
-          </button>
-          <button
-            onClick={() => setView('stats')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors press-feedback ${
-              view === 'stats' ? 'text-[var(--accent)]' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-            }`}
-          >
-            <CalendarIcon className="w-6 h-6" style={{ strokeWidth: view === 'stats' ? 2.5 : 2 }} />
-            <span className={`text-xs font-medium ${view === 'stats' ? 'font-bold' : ''}`}>Stats</span>
           </button>
         </div>
       </div>
