@@ -490,11 +490,6 @@ export default function Dashboard() {
       }
 
       setSheetOpen(false);
-      // Show timer option
-      setTimerOpen(true);
-      setTimerSeconds(120);
-      setTimerInitial(120);
-      setTimerRunning(false);
       await loadData();
     } catch (error) {
       console.error('Error creating PR:', error);
