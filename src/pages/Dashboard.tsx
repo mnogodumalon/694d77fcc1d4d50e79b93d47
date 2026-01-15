@@ -20,10 +20,6 @@ import {
   Award,
   Share2,
   X,
-  Timer,
-  Play,
-  Pause,
-  RotateCcw,
 } from 'lucide-react';
 import type { Uebungen, PrEintraege } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -136,12 +132,6 @@ export default function Dashboard() {
   const [shareCardOpen, setShareCardOpen] = useState(false);
   const [shareData, setShareData] = useState<ShareData | null>(null);
 
-  // Rest Timer State
-  const [timerOpen, setTimerOpen] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(120); // Default 2 min
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerInitial, setTimerInitial] = useState(120);
-  const timerAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [formData, setFormData] = useState<PRFormData>({
     exercise_id: '',
@@ -159,38 +149,6 @@ export default function Dashboard() {
     loadData();
   }, []);
 
-  // Rest Timer Logic
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    if (timerRunning && timerSeconds > 0) {
-      interval = setInterval(() => {
-        setTimerSeconds((prev) => prev - 1);
-      }, 1000);
-    } else if (timerSeconds === 0 && timerRunning) {
-      // Timer finished!
-      setTimerRunning(false);
-
-      // Vibration (mobile)
-      if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200, 100, 200]);
-      }
-
-      // Play sound
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQoAIF+j3NmxZQwAGF2k3dquYQcAFl+n39+xYwoAHGCl3d2vYQsAIWGo4N+wYwgAIWGo4N+wYwgA');
-        audio.play();
-      } catch (e) {
-        // Audio might not be available
-      }
-
-      toast.success('Pause vorbei! 💪', { duration: 5000 });
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [timerRunning, timerSeconds]);
 
   async function loadData() {
     try {
@@ -529,28 +487,6 @@ export default function Dashboard() {
     setShareCardOpen(true);
   }
 
-  // Timer Functions
-  function startTimer(seconds: number) {
-    setTimerInitial(seconds);
-    setTimerSeconds(seconds);
-    setTimerRunning(true);
-    setTimerOpen(true);
-  }
-
-  function toggleTimer() {
-    setTimerRunning((prev) => !prev);
-  }
-
-  function resetTimer() {
-    setTimerSeconds(timerInitial);
-    setTimerRunning(false);
-  }
-
-  function formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
 
   // Filtered exercises for search
   const filteredExercises = exercises.filter((ex) =>
@@ -1490,99 +1426,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Rest Timer Overlay */}
-      {timerOpen && (
-        <div className="fixed inset-0 z-[90] bg-[var(--background)]/98 backdrop-blur-sm flex flex-col">
-          {/* Close Button */}
-          <button
-            onClick={() => {
-              setTimerOpen(false);
-              setTimerRunning(false);
-            }}
-            className="absolute top-6 right-6 w-10 h-10 flex items-center justify-center rounded-full bg-[var(--surface-2)] hover:bg-[var(--surface-3)] transition-colors z-10"
-          >
-            <X className="w-5 h-5" />
-          </button>
-
-          <div className="flex-1 flex flex-col items-center justify-center px-8">
-            {/* Timer Icon */}
-            <div className="w-16 h-16 rounded-full bg-[var(--accent)]/20 flex items-center justify-center mb-6">
-              <Timer className="w-8 h-8 text-[var(--accent)]" />
-            </div>
-
-            {/* Title */}
-            <h2 className="font-display text-2xl font-bold mb-2">Pause</h2>
-            <p className="text-[var(--text-muted)] mb-8">Erhole dich vor dem nächsten Satz</p>
-
-            {/* Timer Display */}
-            <div
-              className="font-display text-8xl font-bold mb-8 tabular-nums"
-              style={{
-                color: timerSeconds <= 10 && timerSeconds > 0 ? '#ef4444' : 'var(--accent)',
-                textShadow: timerSeconds <= 10 && timerSeconds > 0
-                  ? '0 0 40px rgba(239, 68, 68, 0.5)'
-                  : '0 0 40px rgba(255, 143, 168, 0.4)',
-              }}
-            >
-              {formatTime(timerSeconds)}
-            </div>
-
-            {/* Progress Ring */}
-            <div className="w-48 h-2 bg-[var(--surface-2)] rounded-full mb-8 overflow-hidden">
-              <div
-                className="h-full bg-[var(--accent)] rounded-full transition-all duration-1000"
-                style={{ width: `${(timerSeconds / timerInitial) * 100}%` }}
-              />
-            </div>
-
-            {/* Control Buttons */}
-            <div className="flex items-center gap-4 mb-8">
-              <button
-                onClick={resetTimer}
-                className="w-14 h-14 rounded-full bg-[var(--surface-2)] flex items-center justify-center hover:bg-[var(--surface-3)] transition-colors press-feedback"
-              >
-                <RotateCcw className="w-6 h-6" />
-              </button>
-              <button
-                onClick={toggleTimer}
-                className="w-20 h-20 rounded-full bg-[var(--accent)] flex items-center justify-center hover:bg-[var(--accent-hover)] transition-colors press-feedback glow-accent"
-              >
-                {timerRunning ? (
-                  <Pause className="w-8 h-8 text-white" />
-                ) : (
-                  <Play className="w-8 h-8 text-white ml-1" />
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setTimerOpen(false);
-                  setTimerRunning(false);
-                }}
-                className="w-14 h-14 rounded-full bg-[var(--surface-2)] flex items-center justify-center hover:bg-[var(--surface-3)] transition-colors press-feedback"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Preset Buttons */}
-            <div className="flex gap-3">
-              {[60, 90, 120, 180, 300].map((seconds) => (
-                <button
-                  key={seconds}
-                  onClick={() => startTimer(seconds)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all press-feedback ${
-                    timerInitial === seconds
-                      ? 'bg-[var(--accent)] text-white'
-                      : 'bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]'
-                  }`}
-                >
-                  {seconds < 60 ? `${seconds}s` : `${seconds / 60}:00`}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
