@@ -1,175 +1,163 @@
+"""
+Claude Agent for Preview Mode - Makes changes but does NOT auto-deploy.
+The user will review changes in live preview before deploying manually.
+"""
 import asyncio
 import json
 from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, ToolUseBlock, TextBlock, ResultMessage, create_sdk_mcp_server, tool
 import subprocess
 import os
 
+
 async def main():
-    # 1. Metadaten lesen
-    try:
-        with open("/home/user/app/CLAUDE.md", "r") as f:
-            instructions = f.read()
-    except:
-        print("Kein CLAUDE.md")
-
-    def run_git_cmd(cmd: str):
-        """Executes a Git command and throws an error on failure"""
-        print(f"[DEPLOY] Executing: {cmd}")
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            cwd="/home/user/app",
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise Exception(f"Git Error ({cmd}): {result.stderr}")
-        return result.stdout
-
+    # In preview mode, we provide a dummy deploy tool that just informs the user
     @tool("deploy_to_github",
-    "Initializes Git, commits EVERYTHING, and pushes it to the configured repository. Use this ONLY at the very end.",
-    {})
-    async def deploy_to_github(args):
-        try:
-            run_git_cmd("git config --global user.email 'lilo@livinglogic.de'")
-            run_git_cmd("git config --global user.name 'Lilo'")
-            
-            git_push_url = os.getenv('GIT_PUSH_URL')
-            appgroup_id = os.getenv('REPO_NAME')
-            livingapps_api_key = os.getenv('LIVINGAPPS_API_KEY')
-            
-            # Prüfe ob Repo existiert und übernehme .git History
-            print("[DEPLOY] Prüfe ob Repo bereits existiert...")
-            try:
-                run_git_cmd(f"git clone {git_push_url} /tmp/old_repo")
-                run_git_cmd("cp -r /tmp/old_repo/.git /home/user/app/.git")
-                print("[DEPLOY] ✅ History vom existierenden Repo übernommen")
-            except:
-                # Neues Repo - von vorne initialisieren
-                print("[DEPLOY] ✅ Neues Repo wird initialisiert")
-                run_git_cmd("git init")
-                run_git_cmd("git checkout -b main")
-                run_git_cmd(f"git remote add origin {git_push_url}")
-            
-            # Neuen Code committen
-            run_git_cmd("git add -A")
-            run_git_cmd("git commit -m 'Lilo Auto-Deploy' --allow-empty")
-            run_git_cmd("git push origin main")
-            
-            print("[DEPLOY] ✅ Push erfolgreich!")
-            
-            # Ab hier: Aktiviere Dashboard-Links
-            if livingapps_api_key and appgroup_id:
-                import httpx
-                
-                headers = {
-                    "X-API-Key": livingapps_api_key,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json"
-                }
-                
-                try:
-                    # 1. Hole alle App-IDs der Appgroup
-                    print(f"[DEPLOY] Lade Appgroup: {appgroup_id}")
-                    resp = httpx.get(
-                        f"https://my.living-apps.de/rest/appgroups/{appgroup_id}",
-                        headers=headers,
-                        timeout=30
-                    )
-                    resp.raise_for_status()
-                    appgroup = resp.json()
-                    
-                    app_ids = [app_data["id"] for app_data in appgroup.get("apps", {}).values()]
-                    print(f"[DEPLOY] Gefunden: {len(app_ids)} Apps")
-                    
-                    if not app_ids:
-                        print("[DEPLOY] ⚠️ Keine Apps gefunden")
-                        return {"content": [{"type": "text", "text": "✅ Deployment erfolgreich!"}]}
-                    
-                    dashboard_url = f"https://my.living-apps.de/github/{appgroup_id}/"
-                    
-                    # Aktiviere Dashboard-Links
-                    print("[DEPLOY] 🎉 Aktiviere Dashboard-Links...")
-                    for app_id in app_ids:
-                        try:
-                            # URL aktivieren
-                            httpx.put(
-                                f"https://my.living-apps.de/rest/apps/{app_id}/params/la_page_header_additional_url",
-                                headers=headers,
-                                json={"description": "dashboard_url", "type": "string", "value": dashboard_url},
-                                timeout=10
-                            )
-                            # Title aktualisieren
-                            httpx.put(
-                                f"https://my.living-apps.de/rest/apps/{app_id}/params/la_page_header_additional_title",
-                                headers=headers,
-                                json={"description": "dashboard_title", "type": "string", "value": "Dashboard"},
-                                timeout=10
-                            )
-                            print(f"[DEPLOY]   ✓ App {app_id} aktiviert")
-                        except Exception as e:
-                            print(f"[DEPLOY]   ✗ App {app_id}: {e}")
-                    
-                    print("[DEPLOY] ✅ Dashboard-Links erfolgreich hinzugefügt!")
-                    
-                except Exception as e:
-                    print(f"[DEPLOY] ⚠️ Fehler beim Hinzufügen der Dashboard-Links: {e}")
-
-            return {
-                "content": [{"type": "text", "text": "✅ Deployment erfolgreich! Code wurde gepusht und Dashboard-Links hinzugefügt."}]
-            }
-
-        except Exception as e:
-            return {"content": [{"type": "text", "text": f"Deployment Failed: {str(e)}"}], "is_error": True}
+          "In Preview-Mode nicht verfügbar. Der User wird nach der Live-Preview manuell deployen.",
+          {})
+    async def deploy_to_github_disabled(args):
+        """Disabled in preview mode - inform the agent"""
+        return {
+            "content": [{
+                "type": "text", 
+                "text": "⚠️ PREVIEW MODE: Deploy ist deaktiviert. Der User wird die Änderungen erst in der Live-Preview testen und dann manuell deployen. Deine Änderungen sind gespeichert."
+            }]
+        }
 
     deployment_server = create_sdk_mcp_server(
         name="deployment",
         version="1.0.0",
-        tools=[deploy_to_github]
+        tools=[deploy_to_github_disabled]
     )
 
-    # 3. Optionen konfigurieren
+    # Options - LIVE PREVIEW MODE: Accept edits automatically for instant writes!
     options = ClaudeAgentOptions(
         system_prompt={
             "type": "preset",
-            "preset": "claude_code",
-            "append": instructions
+            "preset": "claude_code"
         },
+        setting_sources=["project"],
         mcp_servers={"deploy_tools": deployment_server},
-        permission_mode="acceptEdits",
-        allowed_tools=["Bash", "Write", "Read", "Edit", "Glob", "Grep", "Task", "TodoWrite",
-        "mcp__deploy_tools__deploy_to_github"
-        ],
+        permission_mode="bypassPermissions",  # Bypass all checks - instant writes for live preview!
+        allowed_tools=["Bash", "Write", "Read", "Edit", "Glob", "Grep", "Task", "TodoWrite"],
         cwd="/home/user/app",
-        model="claude-sonnet-4-5-20250929",
+        model="claude-opus-4-6",
     )
 
-    print(f"[LILO] Initialisiere Client")
+    # Session-Resume support
+    resume_session_id = os.getenv('RESUME_SESSION_ID')
+    if resume_session_id:
+        options.resume = resume_session_id
+        print(f"[LILO-PREVIEW] Resuming session: {resume_session_id}")
 
-    # 4. Der Client Lifecycle
+    # User Prompt - prefer file over env var (handles special chars better)
+    user_prompt = None
+    
+    # First try reading from file (more reliable for special chars)
+    prompt_file = "/home/user/app/.user_prompt"
+    if os.path.exists(prompt_file):
+        try:
+            with open(prompt_file, 'r') as f:
+                user_prompt = f.read().strip()
+            if user_prompt:
+                print(f"[LILO-PREVIEW] Prompt aus Datei gelesen: {len(user_prompt)} Zeichen")
+        except Exception as e:
+            print(f"[LILO-PREVIEW] Fehler beim Lesen der Prompt-Datei: {e}")
+    
+    # Fallback to env var
+    if not user_prompt:
+        user_prompt = os.getenv('USER_PROMPT')
+        if user_prompt:
+            print(f"[LILO-PREVIEW] Prompt aus ENV gelesen")
+    
+    if user_prompt:
+        # Preview mode prompt - no deploy, incremental edits for live HMR!
+        query = f"""🔴 LIVE PREVIEW MODE - Der User sieht deine Änderungen in Echtzeit!
+
+User-Anfrage: "{user_prompt}"
+
+⚡ WICHTIG: Der Vite Dev-Server läuft BEREITS! Der User sieht jede Dateiänderung SOFORT im Browser!
+
+SCHRITTE (arbeite INKREMENTELL für Live-Updates):
+
+1. LESEN: Lies src/pages/Dashboard.tsx um die aktuelle Struktur zu verstehen
+
+2. ÄNDERN (SCHRITT FÜR SCHRITT!):
+   - Mache EINE Änderung (z.B. Farbe ändern)
+   - Die Datei wird sofort geschrieben → User sieht es LIVE! ⚡
+   - Mache die NÄCHSTE Änderung
+   - Wieder sofort sichtbar!
+   
+3. TESTEN: Am Ende 'npm run build' um sicherzustellen dass es kompiliert
+
+⚠️ KRITISCH für Live-Preview:
+- Arbeite SCHRITT FÜR SCHRITT, nicht alles auf einmal!
+- Jede Dateiänderung = Live-Update im Browser!
+- Rufe NICHT deploy_to_github auf!
+- Der User testet die Änderungen in der Live-Preview
+
+Das Dashboard existiert bereits. Mache NUR die angeforderten Änderungen.
+Starte JETZT!"""
+        print(f"[LILO-PREVIEW] User-Prompt: {user_prompt}")
+    else:
+        # Initial build in preview mode
+        query = """🔍 PREVIEW MODE - Neues Dashboard ohne Auto-Deploy
+
+Use frontend-design Skill to analyse app structure and generate design_brief.md
+Build the Dashboard.tsx following design_brief.md exactly.
+Use existing types and services from src/types/ and src/services/.
+
+⚠️ WICHTIG:
+- Rufe NICHT deploy_to_github auf!
+- Der User wird das Dashboard erst in der Live-Preview testen
+- Wenn 'npm run build' erfolgreich ist, bist du fertig"""
+        print(f"[LILO-PREVIEW] Build-Mode: Neues Dashboard erstellen (Preview)")
+
+    print(f"[LILO-PREVIEW] Initialisiere Client")
+
+    # Client lifecycle
     async with ClaudeSDKClient(options=options) as client:
-        
-        # Anfrage senden
-        await client.query("Baue das Dashboard")
+        await client.query(query)
 
-        # 5. Antwort-Schleife
-        # receive_response() liefert alles bis zum Ende des Auftrags
         async for message in client.receive_response():
             
-            # A. Wenn er denkt oder spricht
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
-                        #als JSON-Zeile ausgeben
                         print(json.dumps({"type": "think", "content": block.text}), flush=True)
                     
                     elif isinstance(block, ToolUseBlock):
+                        # Enhanced feedback for file operations (live preview!)
+                        if block.name in ["Write", "Edit"]:
+                            file_path = block.input.get('file_path', block.input.get('path', 'unknown'))
+                            print(f"[LIVE] 📝 {block.name}: {file_path}", flush=True)
+                        
                         print(json.dumps({"type": "tool", "tool": block.name, "input": str(block.input)}), flush=True)
 
-            # B. Wenn er fertig ist (oder Fehler)
             elif isinstance(message, ResultMessage):
                 status = "success" if not message.is_error else "error"
-                print(json.dumps({"type": "result", "status": status, "cost": message.total_cost_usd}), flush=True)
+                print(f"[LILO-PREVIEW] Session ID: {message.session_id}")
+                
+                # Save session_id for future resume
+                if message.session_id:
+                    try:
+                        with open("/home/user/app/.claude_session_id", "w") as f:
+                            f.write(message.session_id)
+                        print(f"[LILO-PREVIEW] ✅ Session ID gespeichert")
+                    except Exception as e:
+                        print(f"[LILO-PREVIEW] ⚠️ Fehler: {e}")
+                
+                print(json.dumps({
+                    "type": "result", 
+                    "status": status, 
+                    "cost": message.total_cost_usd,
+                    "session_id": message.session_id
+                }), flush=True)
+                
+                # Signal that preview is ready
+                print("[LILO-PREVIEW] ✅ Änderungen abgeschlossen - Preview wird gestartet")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
