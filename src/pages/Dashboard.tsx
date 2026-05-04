@@ -1158,7 +1158,8 @@ export default function Dashboard() {
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent
           side="bottom"
-          className="h-[90dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0"
+          className="h-[90dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0 overflow-x-hidden"
+          onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
