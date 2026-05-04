@@ -20,6 +20,9 @@ import {
   Award,
   Share2,
   X,
+  MessageCircle,
+  Send,
+  Bot,
 } from 'lucide-react';
 import type { Uebungen, PrEintraege } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -167,6 +170,13 @@ export default function Dashboard() {
   });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: 'user' | 'assistant'; text: string }>>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Data Fetching & Processing
   useEffect(() => {
@@ -554,6 +564,99 @@ export default function Dashboard() {
     if (count <= 2) return 'low';
     if (count <= 4) return 'medium';
     return 'high';
+  }
+
+  // === CHAT ===
+  function generateChatResponse(message: string): string {
+    const msg = message.toLowerCase();
+
+    // Greetings
+    if (msg.match(/^(hallo|hi|hey|moin|servus|guten)/)) {
+      const name = statsData ? `Du hast ${statsData.totalSessions} Sessions und einen ${statsData.currentStreak}-Wochen-Streak. ` : '';
+      return `Hey! 💪 ${name}Was kann ich für dich tun?`;
+    }
+
+    // Help
+    if (msg.includes('hilfe') || msg.includes('help') || msg.includes('was kannst') || msg.includes('was weißt')) {
+      return 'Ich kenne deine Trainings-Daten! Frag mich z.B.:\n• "Was ist mein bester PR?"\n• "Wie ist mein Fortschritt?"\n• "Welche Übungen mache ich am meisten?"\n• "Wie ist mein Streak?"\n• "Was habe ich heute trainiert?"';
+    }
+
+    // Best PR / strongest
+    if (msg.includes('best') || msg.includes('stärk') || msg.includes('maximum') || msg.includes('rekord') || msg.includes('meiste') || (msg.includes('pr') && !msg.includes('sprint'))) {
+      const withPRs = exercises.filter(ex => ex.bestKg && ex.bestKg > 0).sort((a, b) => (b.bestKg || 0) - (a.bestKg || 0));
+      if (withPRs.length === 0) return 'Du hast noch keine PRs eingetragen. Drück auf + und leg los! 🏋️';
+      const top = withPRs.slice(0, 3);
+      return `Deine Top-PRs:\n${top.map((ex, i) => `${i + 1}. ${ex.fields.name}: ${ex.bestKg} kg`).join('\n')} 🏆`;
+    }
+
+    // Today
+    if (msg.includes('heute') || msg.includes('today') || msg.includes('heutigen')) {
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const todayPRs = prsByDate[todayStr] || [];
+      if (todayPRs.length === 0) return 'Heute noch kein Training eingetragen. Zeit für den nächsten PR! 🔥';
+      const names = todayPRs.map(pr => {
+        const exId = extractRecordId(pr.fields.exercise_id);
+        return exercises.find(ex => ex.record_id === exId)?.fields.name || '';
+      }).filter(Boolean);
+      return `Heute hast du ${todayPRs.length} Einträge gemacht: ${names.join(', ')}. Starkes Training! 💪`;
+    }
+
+    // Streak
+    if (msg.includes('streak') || msg.includes('serie') || msg.includes('kontinuität')) {
+      if (!statsData) return 'Noch keine Daten vorhanden.';
+      if (statsData.currentStreak === 0) return 'Noch kein aktiver Streak. Train diese Woche und starte deinen Streak! 🔥';
+      return `Du hast einen ${statsData.currentStreak}-Wochen-Streak! ${statsData.currentStreak >= 4 ? '🔥 Beeindruckend!' : statsData.currentStreak >= 2 ? '💪 Weiter so!' : '✅ Guter Start!'}`;
+    }
+
+    // Progress / fortschritt
+    if (msg.includes('fortschritt') || msg.includes('progress') || msg.includes('verbess') || msg.includes('stärker')) {
+      if (!statsData) return 'Noch zu wenige Daten für eine Auswertung.';
+      const gainStr = statsData.strengthGainPercent > 0 ? `+${statsData.strengthGainPercent}%` : `${statsData.strengthGainPercent}%`;
+      return `Dein durchschnittlicher Kraftzuwachs (Erster PR vs. aktuelles Bestes): ${gainStr} 📈\n${statsData.sessionsPerWeek} Sessions/Woche im Schnitt.`;
+    }
+
+    // Exercises list
+    if (msg.includes('übung') || msg.includes('exercise') || msg.includes('welche') || msg.includes('liste')) {
+      if (exercises.length === 0) return 'Noch keine Übungen angelegt. Drück auf + um zu starten!';
+      const sorted = [...exercises].sort((a, b) => (b.prs.length) - (a.prs.length));
+      const top5 = sorted.slice(0, 5);
+      return `Deine ${exercises.length} Übungen (Top 5 nach Häufigkeit):\n${top5.map(ex => `• ${ex.fields.name} (${ex.prs.length}x)`).join('\n')}`;
+    }
+
+    // Sessions / trainings
+    if (msg.includes('session') || msg.includes('training') || msg.includes('oft') || msg.includes('häufig')) {
+      if (!statsData) return 'Noch keine Sessions vorhanden.';
+      return `Du hast insgesamt ${statsData.totalSessions} Trainings-Sessions – im Schnitt ${statsData.sessionsPerWeek}x pro Woche. 💪`;
+    }
+
+    // Motivation
+    if (msg.includes('motiv') || msg.includes('müde') || msg.includes('keine lust') || msg.includes('aufgeb')) {
+      const motivations = [
+        'Jeder Repräsentation zählt. Geh raus und beweise es dir selbst! 🔥',
+        'Die schwerste Wiederholung ist die, die du gar nicht machst. Los geht\'s! 💪',
+        'Fortschritt ist Fortschritt – egal wie klein. Du bist besser als gestern. ⚡',
+        'Dein zukünftiges Ich wird es dir danken. Jetzt trainieren! 🏆',
+      ];
+      return motivations[Math.floor(Math.random() * motivations.length)];
+    }
+
+    // Default
+    return `Ich kenne deine Trainingsdaten: ${exercises.length} Übungen, ${allPrEntries.length} PR-Einträge${statsData ? `, ${statsData.currentStreak} Wochen Streak` : ''}.\n\nFrag mich nach deinen PRs, Fortschritt, Streak oder Übungen! Oder tippe "Hilfe" für alle Optionen.`;
+  }
+
+  function sendChatMessage() {
+    if (!chatInput.trim() || chatLoading) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    const userMsg = { id: `u-${Date.now()}`, role: 'user' as const, text };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
+    setTimeout(() => {
+      const response = generateChatResponse(text);
+      setChatMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant' as const, text: response }]);
+      setChatLoading(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }, 600);
   }
 
   // === VIEWS ===
@@ -1565,6 +1668,95 @@ export default function Dashboard() {
         </div>
       </div>
 
+
+      {/* Chat Widget */}
+      {/* FAB - above tab bar */}
+      {!chatOpen && (
+        <button
+          onClick={() => {
+            setChatOpen(true);
+            if (chatMessages.length === 0) {
+              const greeting = statsData
+                ? `Hey! 💪 Du hast ${statsData.totalSessions} Sessions und einen ${statsData.currentStreak}-Wochen-Streak.\n\nWas möchtest du wissen? (Tippe "Hilfe" für Optionen)`
+                : 'Hey! Ich bin dein Fitness-Assistent. Was möchtest du wissen?';
+              setChatMessages([{ id: 'init', role: 'assistant', text: greeting }]);
+            }
+          }}
+          className="fixed bottom-20 right-4 z-50 w-12 h-12 rounded-full bg-[var(--accent)] text-white flex items-center justify-center press-feedback glow-accent"
+          style={{ boxShadow: '0 4px 20px rgba(255,143,168,0.4)' }}
+        >
+          <MessageCircle className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Chat Panel */}
+      <Sheet open={chatOpen} onOpenChange={setChatOpen}>
+        <SheetContent
+          side="bottom"
+          className="h-[75dvh] rounded-t-[var(--radius-sheet)] bg-[var(--surface-3)] border-t border-[var(--border)] p-0 overflow-x-hidden"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-dim)]">
+              <div className="w-8 h-8 rounded-full bg-[var(--accent)]/20 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-[var(--accent)]" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Fitness Assistent</p>
+                <p className="text-xs text-[var(--text-dim)]">kennt deine Trainingsdaten</p>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+              {chatMessages.map((msg) => (
+                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div
+                    className={`max-w-[82%] px-3 py-2.5 rounded-2xl text-sm whitespace-pre-line ${
+                      msg.role === 'user'
+                        ? 'bg-[var(--accent)] text-white rounded-br-sm'
+                        : 'bg-[var(--surface-2)] text-[var(--text)] rounded-bl-sm border border-[var(--border)]'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="px-4 pb-4 pt-2 border-t border-[var(--border-dim)]">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Stell eine Frage..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+                  className="flex-1 h-10 bg-[var(--surface-2)] border-[var(--border)] rounded-full px-4 text-sm"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 press-feedback"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Confetti Animation - CSS only, no state change needed to hide */}
       {showConfetti && (
