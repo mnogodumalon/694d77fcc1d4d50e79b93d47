@@ -30,7 +30,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Toaster } from '@/components/ui/sonner';
@@ -114,6 +113,27 @@ function analyzePR(
   };
 }
 
+// Exercise avatar helper - generates a colored circle with a 2-letter abbreviation
+function getExerciseAvatar(name?: string): { color: string; letter: string } {
+  if (!name) return { color: 'hsl(0, 60%, 52%)', letter: '?' };
+  // Hash the full name for a stable unique value
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  // Distribute across full 360° hue spectrum → virtually no color collisions
+  const hue = Math.abs(hash) % 360;
+  const saturation = 55 + (Math.abs(hash >> 4) % 18); // 55–72%
+  const lightness = 46 + (Math.abs(hash >> 8) % 14);  // 46–59%
+  const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  // 2-letter abbreviation: initials from first 2 words, or first 2 chars
+  const words = name.trim().split(/\s+/);
+  const letter = words.length >= 2
+    ? (words[0][0] + words[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+  return { color, letter };
+}
+
 // === MAIN COMPONENT ===
 export default function Dashboard() {
   // State Management
@@ -123,6 +143,7 @@ export default function Dashboard() {
   const [allPrEntries, setAllPrEntries] = useState<PrEintraege[]>([]);
   const [recentPRs, setRecentPRs] = useState<Array<PrEintraege & { exerciseName: string }>>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [exerciseSearch, setExerciseSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -399,6 +420,7 @@ export default function Dashboard() {
       sets: '1',
       note: '',
     });
+    setExerciseSearch('');
     setSheetOpen(true);
   }
 
@@ -639,21 +661,32 @@ export default function Dashboard() {
               filteredExercises.map((ex, idx) => (
                 <div
                   key={ex.record_id}
-                  onClick={() => handleExerciseClick(ex)}
-                  className="flex items-center justify-between p-4 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--surface-2)] transition-all cursor-pointer press-feedback"
+                  className="flex items-center gap-3 p-3 rounded-[var(--radius)] bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:bg-[var(--surface-2)] transition-all"
                   style={{
                     animation: 'fade-in-stagger 0.4s ease-out forwards',
                     animationDelay: `${idx * 60}ms`,
                     opacity: 0,
                   }}
                 >
-                  <div className="flex-1 min-w-0">
+                  {/* Avatar circle with 2-letter abbreviation */}
+                  <div
+                    className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold text-xs tracking-tight cursor-pointer"
+                    style={{ backgroundColor: getExerciseAvatar(ex.fields.name).color }}
+                    onClick={() => handleExerciseClick(ex)}
+                  >
+                    {getExerciseAvatar(ex.fields.name).letter}
+                  </div>
+                  {/* Exercise info - clickable area for detail view */}
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => handleExerciseClick(ex)}
+                  >
                     <h3 className="font-display font-bold text-base mb-1 truncate">
                       {ex.fields.name}
                     </h3>
-                    {ex.lastPR && (
+                    {ex.lastPR ? (
                       <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                        <span>
+                        <span className="font-medium text-[var(--text)]">
                           {ex.lastPR.fields.weight_kg}kg × {ex.lastPR.fields.reps}
                         </span>
                         <span className="text-[var(--text-dim)]">·</span>
@@ -662,9 +695,21 @@ export default function Dashboard() {
                             format(new Date(ex.lastPR.fields.date), 'dd.MM.yy', { locale: de })}
                         </span>
                       </div>
+                    ) : (
+                      <span className="text-sm text-[var(--text-dim)]">Noch kein PR</span>
                     )}
                   </div>
-                  <ChevronRight className="w-5 h-5 text-[var(--text-dim)]" />
+                  {/* Quick-add PR button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPRSheet(ex.record_id);
+                    }}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-all press-feedback glow-accent"
+                    title="PR hinzufügen"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
               ))
             )}
@@ -696,9 +741,17 @@ export default function Dashboard() {
       <div className="flex-1 overflow-auto pb-20">
         {/* Hero Header */}
         <section className="px-4 pt-8 pb-6 stagger-fade-in">
-          <h1 className="font-display text-3xl font-bold mb-4 leading-tight">
-            {selectedExercise.fields.name}
-          </h1>
+          <div className="flex items-center gap-4 mb-4">
+            <div
+              className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center text-white font-display font-bold text-base tracking-tight"
+              style={{ backgroundColor: getExerciseAvatar(selectedExercise.fields.name).color }}
+            >
+              {getExerciseAvatar(selectedExercise.fields.name).letter}
+            </div>
+            <h1 className="font-display text-3xl font-bold leading-tight">
+              {selectedExercise.fields.name}
+            </h1>
+          </div>
 
           {/* KPI Chips */}
           <div className="flex flex-wrap gap-2 mb-6">
@@ -1090,29 +1143,79 @@ export default function Dashboard() {
         >
           <div className="flex flex-col h-full">
             <SheetHeader className="px-6 pt-6 pb-4 border-b border-[var(--border-dim)]">
-              <SheetTitle className="font-display text-xl font-bold">PR eintragen</SheetTitle>
+              <SheetTitle className="font-display text-xl font-bold">
+                {formData.exercise_id
+                  ? exercises.find(ex => ex.record_id === formData.exercise_id)?.fields.name || 'PR eintragen'
+                  : 'PR eintragen'}
+              </SheetTitle>
             </SheetHeader>
 
             <div className="flex-1 overflow-auto px-6 py-6 space-y-5">
-              {/* Exercise Selector */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-[var(--text-muted)]">Übung</Label>
-                <Select
-                  value={formData.exercise_id}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, exercise_id: value }))}
-                >
-                  <SelectTrigger className="h-12 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]">
-                    <SelectValue placeholder="Übung auswählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {exercises.map((ex) => (
-                      <SelectItem key={ex.record_id} value={ex.record_id}>
-                        {ex.fields.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Exercise Selector — visual list shown when no exercise pre-selected */}
+              {!formData.exercise_id ? (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-[var(--text-muted)]">Übung auswählen</Label>
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <Input
+                      placeholder="Suchen..."
+                      value={exerciseSearch}
+                      onChange={(e) => setExerciseSearch(e.target.value)}
+                      className="pl-9 h-10 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
+                      autoFocus
+                    />
+                  </div>
+                  {/* Visual exercise list */}
+                  <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-0.5">
+                    {exercises
+                      .filter((ex) =>
+                        !exerciseSearch ||
+                        ex.fields.name?.toLowerCase().includes(exerciseSearch.toLowerCase())
+                      )
+                      .map((ex) => {
+                        const avatar = getExerciseAvatar(ex.fields.name);
+                        return (
+                          <button
+                            key={ex.record_id}
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => ({ ...prev, exercise_id: ex.record_id }));
+                              setExerciseSearch('');
+                            }}
+                            className="w-full flex items-center gap-3 p-3 rounded-[var(--radius)] bg-[var(--surface-2)] hover:bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/40 transition-all text-left press-feedback"
+                          >
+                            <div
+                              className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white font-display font-bold text-xs tracking-tight"
+                              style={{ backgroundColor: avatar.color }}
+                            >
+                              {avatar.letter}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{ex.fields.name}</div>
+                              {ex.lastPR ? (
+                                <div className="text-xs text-[var(--text-dim)] truncate">
+                                  {ex.lastPR.fields.weight_kg} kg × {ex.lastPR.fields.reps} reps
+                                </div>
+                              ) : (
+                                <div className="text-xs text-[var(--text-dim)]">Noch kein PR</div>
+                              )}
+                            </div>
+                            <ChevronRight className="shrink-0 w-4 h-4 text-[var(--text-dim)]" />
+                          </button>
+                        );
+                      })}
+                    {exercises.filter((ex) =>
+                      !exerciseSearch ||
+                      ex.fields.name?.toLowerCase().includes(exerciseSearch.toLowerCase())
+                    ).length === 0 && (
+                      <p className="text-center py-6 text-sm text-[var(--text-dim)]">
+                        Keine Übungen gefunden
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Weight Input */}
               <div className="space-y-2">

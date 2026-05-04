@@ -450,9 +450,5 @@
   "sonnet1m45MigrationComplete": true,
   "migrationVersion": 11,
   "additionalModelOptionsCache": [],
-  "additionalModelCostsCache": {},
-  "metricsStatusCache": {
-    "enabled": true,
-    "timestamp": 1777889338798
-  }
+  "additionalModelCostsCache": {}
 }
