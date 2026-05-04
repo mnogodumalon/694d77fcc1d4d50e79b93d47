@@ -144,6 +144,8 @@ export default function Dashboard() {
   const [recentPRs, setRecentPRs] = useState<Array<PrEintraege & { exerciseName: string }>>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [exerciseSearch, setExerciseSearch] = useState('');
+  const [showNewExerciseForm, setShowNewExerciseForm] = useState(false);
+  const [newExerciseName, setNewExerciseName] = useState('');
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -421,6 +423,8 @@ export default function Dashboard() {
       note: '',
     });
     setExerciseSearch('');
+    setShowNewExerciseForm(false);
+    setNewExerciseName('');
     setSheetOpen(true);
   }
 
@@ -490,6 +494,21 @@ export default function Dashboard() {
       ...prev,
       [field]: String(Math.max(1, parseInt(prev[field] || '0') - 1)),
     }));
+  }
+
+  async function handleCreateExercise() {
+    const name = newExerciseName.trim();
+    if (!name) return;
+    try {
+      await LivingAppsService.createUebungenEntry({ name });
+      await loadData();
+      setShowNewExerciseForm(false);
+      setNewExerciseName('');
+      setExerciseSearch(name); // zeigt neue Übung gefiltert an
+      toast.success(`"${name}" angelegt`);
+    } catch {
+      toast.error('Fehler beim Anlegen');
+    }
   }
 
   function openDayDetail(date: Date) {
@@ -1214,6 +1233,53 @@ export default function Dashboard() {
                       </p>
                     )}
                   </div>
+
+                  {/* Neue Übung — subtle inline form */}
+                  {!showNewExerciseForm ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewExerciseForm(true);
+                        setNewExerciseName(exerciseSearch);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-[var(--radius)] text-sm text-[var(--text-dim)] hover:text-[var(--text-muted)] hover:bg-[var(--surface-2)] transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span>Neue Übung anlegen</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Input
+                        autoFocus
+                        placeholder="Name der Übung"
+                        value={newExerciseName}
+                        onChange={(e) => setNewExerciseName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCreateExercise();
+                          if (e.key === 'Escape') {
+                            setShowNewExerciseForm(false);
+                            setNewExerciseName('');
+                          }
+                        }}
+                        className="h-9 flex-1 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)] text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateExercise}
+                        disabled={!newExerciseName.trim()}
+                        className="h-9 px-3 rounded-[var(--radius-button)] bg-[var(--accent)] text-white text-sm font-medium disabled:opacity-40 transition-opacity press-feedback"
+                      >
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewExerciseForm(false); setNewExerciseName(''); }}
+                        className="h-9 w-9 flex items-center justify-center rounded-[var(--radius-button)] hover:bg-[var(--surface-2)] transition-colors"
+                      >
+                        <X className="w-4 h-4 text-[var(--text-dim)]" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
 
