@@ -1182,7 +1182,6 @@ export default function Dashboard() {
                       value={exerciseSearch}
                       onChange={(e) => setExerciseSearch(e.target.value)}
                       className="pl-9 h-10 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
-                      autoFocus
                     />
                   </div>
                   {/* Visual exercise list */}
