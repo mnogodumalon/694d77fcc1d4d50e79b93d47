@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, startOfWeek, getWeek } from 'date-fns';
+import { format, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subMonths, subDays, startOfWeek, getWeek } from 'date-fns';
 import { de } from 'date-fns/locale';
 import {
   TrendingUp,
@@ -414,12 +414,13 @@ export default function Dashboard() {
   }
 
   function openPRSheet(exerciseId?: string) {
+    const exercise = exerciseId ? exercises.find((ex) => ex.record_id === exerciseId) : null;
     setFormData({
       exercise_id: exerciseId || '',
       date: format(new Date(), 'yyyy-MM-dd'),
-      weight_kg: '',
-      reps: '',
-      sets: '1',
+      weight_kg: exercise?.lastPR?.fields.weight_kg ? String(exercise.lastPR.fields.weight_kg) : '',
+      reps: exercise?.lastPR?.fields.reps ? String(exercise.lastPR.fields.reps) : '',
+      sets: exercise?.lastPR?.fields.sets ? String(exercise.lastPR.fields.sets) : '1',
       note: '',
     });
     setExerciseSearch('');
@@ -1146,7 +1147,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="phone-frame flex flex-col min-h-screen bg-[var(--background)] text-[var(--text)]">
+    <div className="phone-frame flex flex-col min-h-screen bg-[var(--background)] text-[var(--text)] overflow-x-hidden">
       <Toaster position="top-center" />
       <TopAppBar />
 
@@ -1170,7 +1171,7 @@ export default function Dashboard() {
               </SheetTitle>
             </SheetHeader>
 
-            <div className="flex-1 overflow-auto px-6 py-6 space-y-5">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 space-y-5">
               {/* Exercise Selector — visual list shown when no exercise pre-selected */}
               {!formData.exercise_id ? (
                 <div className="space-y-3">
@@ -1199,7 +1200,13 @@ export default function Dashboard() {
                             key={ex.record_id}
                             type="button"
                             onClick={() => {
-                              setFormData((prev) => ({ ...prev, exercise_id: ex.record_id }));
+                              setFormData((prev) => ({
+                                ...prev,
+                                exercise_id: ex.record_id,
+                                weight_kg: ex.lastPR?.fields.weight_kg ? String(ex.lastPR.fields.weight_kg) : '',
+                                reps: ex.lastPR?.fields.reps ? String(ex.lastPR.fields.reps) : '',
+                                sets: ex.lastPR?.fields.sets ? String(ex.lastPR.fields.sets) : '1',
+                              }));
                               setExerciseSearch('');
                             }}
                             className="w-full flex items-center gap-3 p-3 rounded-[var(--radius)] bg-[var(--surface-2)] hover:bg-[var(--surface-1)] border border-[var(--border)] hover:border-[var(--accent)]/40 transition-all text-left press-feedback"
@@ -1286,14 +1293,32 @@ export default function Dashboard() {
               {/* Weight Input */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-[var(--text-muted)]">Gewicht (kg)</Label>
-                <Input
-                  type="number"
-                  step="0.5"
-                  placeholder="z.B. 80"
-                  value={formData.weight_kg}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, weight_kg: e.target.value }))}
-                  className="h-16 text-3xl font-display font-bold text-center bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)] focus:border-[var(--accent)]"
-                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, weight_kg: String(Math.max(0, parseFloat(prev.weight_kg || '0') - 2.5)) }))}
+                    className="shrink-0 w-14 h-16 flex flex-col items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors press-feedback"
+                  >
+                    <Minus className="w-4 h-4" />
+                    <span className="text-[10px] text-[var(--text-dim)] mt-0.5">2.5</span>
+                  </button>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    placeholder="0"
+                    value={formData.weight_kg}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, weight_kg: e.target.value }))}
+                    className="h-16 text-3xl font-display font-bold text-center bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)] focus:border-[var(--accent)] min-w-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, weight_kg: String(parseFloat(prev.weight_kg || '0') + 2.5) }))}
+                    className="shrink-0 w-14 h-16 flex flex-col items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors press-feedback"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="text-[10px] mt-0.5">2.5</span>
+                  </button>
+                </div>
               </div>
 
               {/* Comparison: Shows last PR or live diff */}
@@ -1329,9 +1354,27 @@ export default function Dashboard() {
               )}
 
               {/* Reps & Sets */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-[var(--text-muted)]">Wiederholungen</Label>
+                  {/* Quick chips */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[5, 6, 8, 10, 12, 15, 20].map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, reps: String(r) }))}
+                        className={`h-9 px-3 rounded-full text-sm font-medium border transition-colors press-feedback ${
+                          formData.reps === String(r)
+                            ? 'bg-[var(--accent)] border-[var(--accent)] text-white'
+                            : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Stepper for custom value */}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1359,41 +1402,68 @@ export default function Dashboard() {
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-[var(--text-muted)]">Sätze</Label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => decrementValue('sets')}
-                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors press-feedback"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={formData.sets}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, sets: e.target.value }))}
-                      className="h-10 text-center font-display font-bold text-xl bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => incrementValue('sets')}
-                      className="w-10 h-10 flex items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-2)] border border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors press-feedback"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                  {/* Quick chips for sets */}
+                  <div className="flex gap-1.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, sets: String(s) }))}
+                        className={`h-9 w-10 rounded-full text-sm font-medium border transition-colors press-feedback shrink-0 ${
+                          formData.sets === String(s)
+                            ? 'bg-[var(--accent)] border-[var(--accent)] text-white'
+                            : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              {/* Date */}
+              {/* Date — quick chips */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-[var(--text-muted)]">Datum</Label>
-                <Input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-                  className="h-12 bg-[var(--surface-2)] border-[var(--border)] rounded-[var(--radius-button)]"
-                />
+                <div className="flex gap-2">
+                  {[
+                    { label: 'Heute', value: format(new Date(), 'yyyy-MM-dd') },
+                    { label: 'Gestern', value: format(subDays(new Date(), 1), 'yyyy-MM-dd') },
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, date: opt.value }))}
+                      className={`flex-1 h-11 rounded-[var(--radius-button)] border text-sm font-medium transition-colors press-feedback ${
+                        formData.date === opt.value
+                          ? 'bg-[var(--accent)] border-[var(--accent)] text-white'
+                          : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text)]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  {/* Custom date — only shown when neither today nor yesterday */}
+                  <label className={`relative overflow-hidden h-11 px-3 flex items-center justify-center rounded-[var(--radius-button)] border cursor-pointer transition-colors press-feedback ${
+                    formData.date !== format(new Date(), 'yyyy-MM-dd') && formData.date !== format(subDays(new Date(), 1), 'yyyy-MM-dd')
+                      ? 'bg-[var(--accent)] border-[var(--accent)] text-white'
+                      : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)]'
+                  }`}>
+                    <CalendarIcon className="w-4 h-4 relative z-10 pointer-events-none" />
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </label>
+                </div>
+                {/* Show selected date when custom */}
+                {formData.date !== format(new Date(), 'yyyy-MM-dd') && formData.date !== format(subDays(new Date(), 1), 'yyyy-MM-dd') && (
+                  <p className="text-xs text-[var(--text-dim)] pl-1">
+                    {format(new Date(formData.date + 'T12:00:00'), 'EEEE, dd. MMMM yyyy', { locale: de })}
+                  </p>
+                )}
               </div>
 
               {/* Note */}
