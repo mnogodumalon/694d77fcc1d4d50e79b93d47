@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "forms": [
+    {
+      "entity": "uebungen",
+      "app_id": "694d77f2ef696e8bff21287d",
+      "path": "/rest/apps/694d77f2ef696e8bff21287d/records",
+      "allowed_fields": [
+        "name",
+        "created_at"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Übungen — Formular"
+    },
+    {
+      "entity": "pr_eintraege",
+      "app_id": "694d77f4b641f5b879e4e810",
+      "path": "/rest/apps/694d77f4b641f5b879e4e810/records",
+      "allowed_fields": [
+        "date",
+        "weight_kg",
+        "reps",
+        "sets",
+        "note"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "PR-Einträge — Formular"
+    }
+  ]
+}

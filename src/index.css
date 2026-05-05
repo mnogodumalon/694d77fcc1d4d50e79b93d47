@@ -1,16 +1,8 @@
-/* === GOOGLE FONTS: MIDNIGHT GYM AESTHETIC === */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;700&display=swap');
-
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -42,197 +34,102 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* Figma shadows: subtle warm grey + soft card elevation */
+  --shadow-sm: 0 0 4px 0 rgba(155, 155, 155, 0.5);
+  --shadow: 0 0 4px 0 rgba(155, 155, 155, 0.5);
+  --shadow-md: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 8px 32px 0 rgba(0, 0, 0, 0.12);
+  --shadow-2xl: 0 12px 48px 0 rgba(0, 0, 0, 0.15);
 }
 
-/* === MIDNIGHT GYM THEME === */
-:root {
-  /* Typography */
-  --font-display: 'Space Grotesk', system-ui, sans-serif;
-  --font-ui: 'DM Sans', system-ui, sans-serif;
-
-  /* Radius System */
-  --radius: 0.75rem; /* 12px - Cards */
-  --radius-sheet: 1rem; /* 16px - Bottom Sheets */
-  --radius-chip: 624.9375rem; /* 999px - Pills */
-  --radius-button: 0.625rem; /* 10px - Buttons */
-
-  /* Midnight Gym Color Tokens (Dark Dim) */
-  --background: #0a0a0f;
-  --foreground: #e8e8f0;
-
-  --surface-1: #141419;
-  --surface-2: #1c1c24;
-  --surface-3: #252530;
-
-  --text: #e8e8f0;
-  --text-muted: #a0a0b0;
-  --text-dim: #727280;
-
-  /* App Accent Color - Energetic Pink */
-  --accent: #ff8fa8;
-  --accent-hover: #ffa8bc;
-  --accent-glow: rgba(255, 143, 168, 0.35);
-
-  --border: #2a2a35;
-  --border-dim: #1a1a20;
-
-  /* Map to shadcn tokens */
-  --card: var(--surface-2);
-  --card-foreground: var(--text);
-  --popover: var(--surface-3);
-  --popover-foreground: var(--text);
-  --primary: #ff8fa8;
-  --primary-foreground: #ffffff;
-  --secondary: var(--surface-2);
-  --secondary-foreground: var(--text);
-  --muted: var(--surface-1);
-  --muted-foreground: var(--text-muted);
-  --destructive: #ef4444;
-  --input: var(--border);
-  --ring: #ff8fa8;
-}
-
-/* === ANIMATIONS === */
-@keyframes fade-in-stagger {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes press-feedback {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.98); }
-  100% { transform: scale(1); }
-}
-
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
-  50% { box-shadow: 0 0 20px 8px var(--accent-glow); }
-}
-
-@keyframes sheet-slide-up {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes highlight-flash {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(255, 77, 106, 0.1); }
-  100% { background-color: transparent; }
-}
-
-@keyframes confetti-fall {
-  0% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100vh) rotate(720deg);
-    opacity: 0;
-  }
-}
-
-@keyframes confetti-container-fade {
-  0% {
-    opacity: 1;
-    visibility: visible;
-  }
-  90% {
-    opacity: 1;
-    visibility: visible;
-  }
-  100% {
-    opacity: 0;
-    visibility: hidden;
-  }
-}
-
-.animate-confetti {
-  animation: confetti-fall 3s ease-out forwards;
-}
-
-.animate-confetti-container {
-  animation: confetti-container-fade 3.5s ease-out forwards;
-}
-
-/* === BASE STYLES === */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-ui);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    font-family: 'Figtree', ui-sans-serif, system-ui, sans-serif;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+  /* Hides CRUD page nav links (.nav-crud-item) via display:none */
+  .nav-crud-item {
+    display: none !important;
+  }
+  /* Inset table row dividers — Figma rebranding: lines don't touch card edges */
+  table tbody tr {
+    border-bottom: none !important;
+  }
+  table tbody tr:not(:last-child) {
+    background-image: linear-gradient(to right, transparent 1.5rem, var(--border) 1.5rem, var(--border) calc(100% - 1.5rem), transparent calc(100% - 1.5rem));
+    background-size: 100% 1px;
+    background-position: bottom;
+    background-repeat: no-repeat;
   }
 }
 
-/* === UTILITY CLASSES === */
-.font-display {
-  font-family: var(--font-display);
-}
+:root {
+  --topbar-h: 73px;
+  /* Figma: 16px nav items, 27px cards, 100px pills */
+  --radius: 1rem;
 
-.font-ui {
-  font-family: var(--font-ui);
-}
+  /* neutral/50 — warm light grey page background */
+  --background: #f9f8f7;
+  /* neutral/900 — black text */
+  --foreground: #000000;
 
-.stagger-fade-in {
-  animation: fade-in-stagger 0.4s ease-out forwards;
-}
+  /* neutral/0 — white cards */
+  --card: #ffffff;
+  --card-foreground: #000000;
 
-.stagger-delay-1 {
-  animation-delay: 100ms;
-  opacity: 0;
-}
+  --popover: #ffffff;
+  --popover-foreground: #000000;
 
-.stagger-delay-2 {
-  animation-delay: 160ms;
-  opacity: 0;
-}
+  /* orange/500 — primary CTA buttons */
+  --primary: #d14600;
+  --primary-foreground: #ffffff;
 
-.stagger-delay-3 {
-  animation-delay: 220ms;
-  opacity: 0;
-}
+  /* blue/10 + blue/900 — secondary (table headers, subtle highlights) */
+  --secondary: #eff6ff;
+  --secondary-foreground: #374151;
 
-.press-feedback:active {
-  animation: press-feedback 0.15s ease-out;
-}
+  /* neutral/200 + neutral/500 — muted backgrounds and text */
+  --muted: #e5e7eb;
+  --muted-foreground: #9b9b9b;
 
-.glow-accent {
-  box-shadow: 0 0 20px 4px var(--accent-glow);
-}
+  /* orange/50 + orange/900 — accent (active nav, hover states) */
+  --accent: #fff4ee;
+  --accent-foreground: #c94300;
 
-.highlight-flash {
-  animation: highlight-flash 0.3s ease-out;
-}
+  --destructive: oklch(0.577 0.245 27.325);
 
-/* === MOBILE-FIRST LAYOUT === */
-@media (min-width: 768px) {
-  /* Desktop: Phone Frame */
-  .phone-frame {
-    max-width: 420px;
-    margin: 0 auto;
-    min-height: 100dvh;
-    box-shadow: 0 0 0 1px var(--border-dim), 0 20px 60px rgba(0, 0, 0, 0.5);
-  }
+  /* neutral/200 — borders */
+  --border: #e5e7eb;
+  /* neutral/400 — input borders */
+  --input: #d9d9d9;
+  /* orange/500 — focus ring */
+  --ring: #d14600;
+
+  /* Chart palette: orange → blue → dark → warm → light */
+  --chart-1: #ff5c00;
+  --chart-2: #2563eb;
+  --chart-3: #d14600;
+  --chart-4: #374151;
+  --chart-5: #bfdbfe;
+
+  /* Light sidebar (matches Figma: white bg, warm accents) */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #374151;
+  --sidebar-primary: #d14600;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fff4ee;
+  --sidebar-accent-foreground: #c94300;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #d14600;
 }

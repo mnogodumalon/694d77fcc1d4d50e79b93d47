@@ -1,5 +1,8 @@
 // AUTOMATICALLY GENERATED TYPES - DO NOT EDIT
 
+export type LookupValue = { key: string; label: string };
+export type GeoLocation = { lat: number; long: number; info?: string };
+
 export interface Uebungen {
   record_id: string;
   createdat: string;
@@ -29,6 +32,30 @@ export const APP_IDS = {
   PR_EINTRAEGE: '694d77f4b641f5b879e4e810',
 } as const;
 
-// Helper Types for creating new records
-export type CreateUebungen = Uebungen['fields'];
-export type CreatePrEintraege = PrEintraege['fields'];
+
+export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: string}[]>> = {};
+
+export const FIELD_TYPES: Record<string, Record<string, string>> = {
+  'uebungen': {
+    'name': 'string/text',
+    'created_at': 'date/date',
+  },
+  'pr_eintraege': {
+    'exercise_id': 'applookup/select',
+    'date': 'date/date',
+    'weight_kg': 'number',
+    'reps': 'number',
+    'sets': 'number',
+    'note': 'string/textarea',
+  },
+};
+
+type StripLookup<T> = {
+  [K in keyof T]: T[K] extends LookupValue | undefined ? string | LookupValue | undefined
+    : T[K] extends LookupValue[] | undefined ? string[] | LookupValue[] | undefined
+    : T[K];
+};
+
+// Helper Types for creating new records (lookup fields as plain strings for API)
+export type CreateUebungen = StripLookup<Uebungen['fields']>;
+export type CreatePrEintraege = StripLookup<PrEintraege['fields']>;
