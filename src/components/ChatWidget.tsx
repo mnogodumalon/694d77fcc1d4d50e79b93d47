@@ -26,9 +26,7 @@ function Linkify({ text }: { text: string }) {
 }
 
 function renderInline(text: string) {
-  // Bold, italic, inline code, images, links — applied left-to-right
   const tokens: Array<{ type: string; text: string; href?: string }> = [];
-  // Regex order: code, bold, italic, md-image, md-link (image must come before link)
   const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[[^\]]+\]\([^)]+\))/g;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -52,7 +50,7 @@ function renderInline(text: string) {
 
   return tokens.map((t, i) => {
     switch (t.type) {
-      case 'code': return <code key={i} className="bg-black/5 rounded px-1 py-0.5 text-[0.85em] font-mono">{t.text}</code>;
+      case 'code': return <code key={i} className="bg-white/10 rounded px-1 py-0.5 text-[0.85em] font-mono">{t.text}</code>;
       case 'bold': return <strong key={i}><Linkify text={t.text} /></strong>;
       case 'italic': return <em key={i}><Linkify text={t.text} /></em>;
       case 'image': {
@@ -80,34 +78,32 @@ function tryParseJson(text: string): unknown | undefined {
 }
 
 function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
-  if (value === null) return <span className="text-muted-foreground italic">null</span>;
-  if (typeof value === 'boolean') return <span className="text-primary font-medium">{value ? 'true' : 'false'}</span>;
+  if (value === null) return <span className="text-[#727280] italic">null</span>;
+  if (typeof value === 'boolean') return <span className="text-[#ff8fa8] font-medium">{value ? 'true' : 'false'}</span>;
   if (typeof value === 'number') return <span className="font-medium">{value}</span>;
   if (typeof value === 'string') {
     URL_RE.lastIndex = 0;
-    if (URL_RE.test(value)) { URL_RE.lastIndex = 0; return <a href={value.match(URL_RE)![0]} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{value}</a>; }
+    if (URL_RE.test(value)) { URL_RE.lastIndex = 0; return <a href={value.match(URL_RE)![0]} target="_blank" rel="noopener noreferrer" className="text-[#ff8fa8] underline break-all">{value}</a>; }
     return <span className="break-words">{value}</span>;
   }
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-muted-foreground italic">[]</span>;
-    // Array of primitives: inline comma-separated
+    if (value.length === 0) return <span className="text-[#727280] italic">[]</span>;
     if (value.every(v => v === null || typeof v !== 'object')) {
-      return <span className="flex flex-wrap gap-1">{value.map((v, i) => <span key={i} className="inline-flex items-center bg-black/5 rounded px-1.5 py-0.5 text-[0.9em]"><JsonValue value={v} depth={depth + 1} /></span>)}</span>;
+      return <span className="flex flex-wrap gap-1">{value.map((v, i) => <span key={i} className="inline-flex items-center bg-white/10 rounded px-1.5 py-0.5 text-[0.9em]"><JsonValue value={v} depth={depth + 1} /></span>)}</span>;
     }
-    // Array of objects: render each
-    return <div className="space-y-1.5 mt-1">{value.map((v, i) => <div key={i} className="rounded-lg border border-border/40 bg-card p-2"><JsonValue value={v} depth={depth + 1} /></div>)}</div>;
+    return <div className="space-y-1.5 mt-1">{value.map((v, i) => <div key={i} className="rounded-lg border border-[#2a2a35] bg-[#1c1c28] p-2"><JsonValue value={v} depth={depth + 1} /></div>)}</div>;
   }
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return <span className="text-muted-foreground italic">{'{}'}</span>;
+    if (entries.length === 0) return <span className="text-[#727280] italic">{'{}'}</span>;
     return (
       <div className={`space-y-1 ${depth > 0 ? '' : ''}`}>
         {entries.map(([k, v]) => {
           const isSimple = v === null || typeof v !== 'object';
           return (
             <div key={k} className={isSimple ? 'flex items-baseline gap-2 min-w-0' : ''}>
-              <span className="text-muted-foreground text-[0.85em] font-medium shrink-0">{k}</span>
-              {isSimple ? <span className="min-w-0"><JsonValue value={v} depth={depth + 1} /></span> : <div className="mt-0.5 pl-3 border-l-2 border-border/30"><JsonValue value={v} depth={depth + 1} /></div>}
+              <span className="text-[#727280] text-[0.85em] font-medium shrink-0">{k}</span>
+              {isSimple ? <span className="min-w-0"><JsonValue value={v} depth={depth + 1} /></span> : <div className="mt-0.5 pl-3 border-l-2 border-[#2a2a35]"><JsonValue value={v} depth={depth + 1} /></div>}
             </div>
           );
         })}
@@ -120,22 +116,21 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
 function JsonView({ text }: { text: string }) {
   const parsed = tryParseJson(text);
   if (parsed === undefined) {
-    // Fallback: not valid JSON, render as code
     return (
-      <pre className="my-1.5 p-2.5 rounded-lg bg-black/5 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
+      <pre className="my-1.5 p-2.5 rounded-lg bg-white/10 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
         <code><Linkify text={text} /></code>
       </pre>
     );
   }
   return (
-    <div className="my-1.5 p-2.5 rounded-lg bg-black/5 overflow-x-auto text-[0.9em]">
+    <div className="my-1.5 p-2.5 rounded-lg bg-white/10 overflow-x-auto text-[0.9em]">
       <JsonValue value={parsed} />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Lightweight Python syntax highlighter (no external deps)
+// Lightweight Python syntax highlighter
 // ---------------------------------------------------------------------------
 
 function highlightPython(code: string): React.ReactNode[] {
@@ -157,12 +152,12 @@ function highlightPython(code: string): React.ReactNode[] {
   if (last < code.length) tokens.push({ type: 'plain', text: code.slice(last) });
 
   const colorMap: Record<string, string> = {
-    comment: 'text-emerald-600',
-    string: 'text-amber-600',
-    keyword: 'text-purple-600 font-medium',
-    builtin: 'text-blue-600',
-    number: 'text-orange-600',
-    decorator: 'text-rose-600',
+    comment: 'text-emerald-400',
+    string: 'text-amber-400',
+    keyword: 'text-purple-400 font-medium',
+    builtin: 'text-blue-400',
+    number: 'text-orange-400',
+    decorator: 'text-rose-400',
     plain: '',
   };
 
@@ -183,7 +178,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 2000);
         });
       }}
-      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+      className="flex items-center gap-1 text-xs text-[#727280] hover:text-[#e8e8f0] transition-colors mt-1"
       title={copied ? "Kopiert!" : "Code kopieren"}
     >
       {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
@@ -197,7 +192,6 @@ function CopyButton({ text }: { text: string }) {
 // ---------------------------------------------------------------------------
 
 function ChatMarkdown({ content }: { content: string }) {
-  // Split into code blocks and text segments
   const segments: Array<{ type: 'code' | 'text'; lang?: string; value: string }> = [];
   const codeRe = /(?:```|~~~)(\w*)\n?([\s\S]*?)(?:```|~~~)/g;
   let last = 0;
@@ -213,14 +207,13 @@ function ChatMarkdown({ content }: { content: string }) {
     <>
       {segments.map((seg, si) => {
         if (seg.type === 'code') {
-          // JSON code blocks → structured UI
           if (seg.lang === 'json' || (!seg.lang && tryParseJson(seg.value) !== undefined)) {
             return <JsonView key={si} text={seg.value} />;
           }
           if (seg.lang === 'python') {
             return (
               <div key={si}>
-                <pre className="my-1.5 p-2.5 rounded-lg bg-black/5 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
+                <pre className="my-1.5 p-2.5 rounded-lg bg-white/10 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
                   <code>{highlightPython(seg.value)}</code>
                 </pre>
                 <CopyButton text={seg.value} />
@@ -228,16 +221,14 @@ function ChatMarkdown({ content }: { content: string }) {
             );
           }
           return (
-            <pre key={si} className="my-1.5 p-2.5 rounded-lg bg-black/5 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
+            <pre key={si} className="my-1.5 p-2.5 rounded-lg bg-white/10 overflow-x-auto text-[0.85em] font-mono leading-relaxed whitespace-pre-wrap break-all">
               <code><Linkify text={seg.value} /></code>
             </pre>
           );
         }
-        // Plain text that is entirely JSON → structured UI
         if (tryParseJson(seg.value) !== undefined) {
           return <JsonView key={si} text={seg.value} />;
         }
-        // Text block: parse line-by-line for headers, lists, tables, paragraphs
         const lines = seg.value.split('\n');
         const elements: ReactElement[] = [];
         let listItems: Array<{ ordered: boolean; text: string }> = [];
@@ -263,13 +254,12 @@ function ChatMarkdown({ content }: { content: string }) {
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
 
-          // Table: detect header row followed by separator row
           if (i + 1 < lines.length && line.includes('|') && isTableSep(lines[i + 1])) {
             flushList();
             const headers = parseTableRow(line);
             const sepCells = parseTableRow(lines[i + 1]);
             const aligns = sepCells.map(c => c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : 'left');
-            i += 1; // skip separator
+            i += 1;
             const bodyRows: string[][] = [];
             while (i + 1 < lines.length && lines[i + 1].includes('|')) {
               i++;
@@ -281,7 +271,7 @@ function ChatMarkdown({ content }: { content: string }) {
                   <thead>
                     <tr>
                       {headers.map((h, ci) => (
-                        <th key={ci} className="border border-border/50 px-2 py-1 font-semibold bg-black/5 text-left" style={{ textAlign: (aligns[ci] || 'left') as any }}>
+                        <th key={ci} className="border border-[#2a2a35] px-2 py-1 font-semibold bg-white/5 text-left" style={{ textAlign: (aligns[ci] || 'left') as React.CSSProperties['textAlign'] }}>
                           {renderInline(h)}
                         </th>
                       ))}
@@ -291,7 +281,7 @@ function ChatMarkdown({ content }: { content: string }) {
                     {bodyRows.map((row, ri) => (
                       <tr key={ri}>
                         {row.map((cell, ci) => (
-                          <td key={ci} className="border border-border/50 px-2 py-1" style={{ textAlign: (aligns[ci] || 'left') as any }}>
+                          <td key={ci} className="border border-[#2a2a35] px-2 py-1" style={{ textAlign: (aligns[ci] || 'left') as React.CSSProperties['textAlign'] }}>
                             {renderInline(cell)}
                           </td>
                         ))}
@@ -304,7 +294,6 @@ function ChatMarkdown({ content }: { content: string }) {
             continue;
           }
 
-          // Headers
           const hm = line.match(/^(#{1,3})\s+(.+)$/);
           if (hm) {
             flushList();
@@ -313,13 +302,10 @@ function ChatMarkdown({ content }: { content: string }) {
             elements.push(<div key={`h-${i}`} className={cls}>{renderInline(hm[2])}</div>);
             continue;
           }
-          // Unordered list
           const ulm = line.match(/^[\s]*[-*]\s+(.+)$/);
           if (ulm) { listItems.push({ ordered: false, text: ulm[1] }); continue; }
-          // Ordered list
           const olm = line.match(/^[\s]*\d+\.\s+(.+)$/);
           if (olm) { listItems.push({ ordered: true, text: olm[1] }); continue; }
-          // Regular line
           flushList();
           if (line.trim() === '') {
             if (i > 0 && i < lines.length - 1) elements.push(<div key={`br-${i}`} className="h-1" />);
@@ -338,10 +324,9 @@ function ChatMarkdown({ content }: { content: string }) {
 // ChatWidget component
 // ---------------------------------------------------------------------------
 
-// File type display config — add new non-image types here
 const FILE_TYPES: Record<string, { Icon: typeof IconFileTypePdf; label: string; color: string }> = {
-  'application/pdf': { Icon: IconFileTypePdf, label: 'PDF', color: 'text-red-500' },
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { Icon: IconFileSpreadsheet, label: 'Excel', color: 'text-green-600' },
+  'application/pdf': { Icon: IconFileTypePdf, label: 'PDF', color: 'text-red-400' },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { Icon: IconFileSpreadsheet, label: 'Excel', color: 'text-green-400' },
 };
 
 function getFileTypeInfo(dataUri: string) {
@@ -369,7 +354,6 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (chatOpen && inputRef.current) {
-      // Delay focus to avoid iOS zoom glitch on panel open
       setTimeout(() => inputRef.current?.focus(), 300);
     }
     if (!chatOpen) setIsFullscreen(false);
@@ -384,7 +368,6 @@ export default function ChatWidget() {
     setInput('');
     setImage(null);
     setFileName(null);
-    // Dismiss keyboard on mobile after send
     inputRef.current?.blur();
   }, [input, image, sendMessage]);
 
@@ -410,15 +393,15 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button — positioned above bottom tab bar */}
       <button
         onClick={() => setChatOpen(!chatOpen)}
         className={`
-          fixed bottom-5 right-5 z-50 w-12 h-12 rounded-full shadow-lg
+          fixed bottom-20 right-5 z-50 w-12 h-12 rounded-full shadow-lg
           flex items-center justify-center transition-all duration-200
           ${chatOpen
-            ? 'bg-muted text-muted-foreground hover:bg-muted/80'
-            : 'bg-primary text-primary-foreground hover:scale-105 hover:shadow-xl'
+            ? 'bg-[#2a2a35] text-[#e8e8f0] hover:bg-[#2a2a35]/80'
+            : 'bg-[#ff8fa8] text-[#12121a] hover:scale-105 hover:shadow-xl'
           }
         `}
         aria-label="Assistent"
@@ -428,30 +411,30 @@ export default function ChatWidget() {
 
       {/* Chat panel */}
       {chatOpen && (
-        <div className={`fixed z-50 bg-card shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
+        <div className={`fixed z-50 bg-[#12121a] shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${
           isFullscreen
             ? 'inset-0 rounded-none'
-            : 'left-0 right-0 bottom-0 top-[40%] rounded-t-2xl sm:inset-auto sm:bottom-20 sm:right-5 sm:left-auto sm:top-auto sm:w-[480px] sm:h-[640px] sm:border sm:border-border sm:rounded-2xl'
+            : 'left-0 right-0 bottom-0 top-[40%] rounded-t-2xl sm:inset-auto sm:bottom-20 sm:right-5 sm:left-auto sm:top-auto sm:w-[480px] sm:h-[640px] sm:border sm:border-[#2a2a35] sm:rounded-2xl'
         }`}>
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card shrink-0">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a35] bg-[#1a1a24] shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <IconSparkles size={12} className="text-primary" />
+              <div className="w-6 h-6 rounded-lg bg-[#ff8fa8]/15 flex items-center justify-center shrink-0">
+                <IconSparkles size={12} className="text-[#ff8fa8]" />
               </div>
-              <span className="text-sm font-semibold text-foreground truncate">Assistent</span>
+              <span className="text-sm font-semibold text-[#e8e8f0] truncate">KI-Assistent</span>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="p-1.5 rounded-md text-[#727280] hover:text-[#e8e8f0] hover:bg-[#2a2a35] transition-colors"
                 title={isFullscreen ? 'Verkleinern' : 'Vollbild'}
               >
                 {isFullscreen ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
               </button>
               <button
                 onClick={() => setChatOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="p-1.5 rounded-md text-[#727280] hover:text-[#e8e8f0] hover:bg-[#2a2a35] transition-colors"
               >
                 <IconX size={14} />
               </button>
@@ -461,7 +444,7 @@ export default function ChatWidget() {
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center gap-2 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 text-[#727280]">
                 <IconSparkles size={28} stroke={1.5} />
                 <p className="text-xs">Frage stellen oder Bild hochladen...</p>
               </div>
@@ -471,13 +454,13 @@ export default function ChatWidget() {
               <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                   m.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-br-md'
-                    : 'bg-muted text-foreground rounded-bl-md'
+                    ? 'bg-[#ff8fa8] text-[#12121a] rounded-br-md'
+                    : 'bg-[#1c1c28] text-[#e8e8f0] rounded-bl-md'
                 }`}>
                   {m.image && (() => {
                     const ft = getFileTypeInfo(m.image);
                     return ft ? (
-                      <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-black/10">
+                      <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-black/20">
                         <ft.Icon size={20} />
                         <span className="text-xs font-medium">{ft.label}</span>
                       </div>
@@ -486,7 +469,7 @@ export default function ChatWidget() {
                     );
                   })()}
                   {m.content === 'In Arbeit...' ? (
-                    <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className="flex items-center gap-2 text-[#727280]">
                       <IconLoader2 size={14} className="animate-spin" />
                       In Arbeit...
                     </span>
@@ -502,7 +485,7 @@ export default function ChatWidget() {
             ))}
             {chatLoading && messages.length > 0 && messages[messages.length - 1].content !== 'In Arbeit...' && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].content === '' && (
               <div className="flex justify-start">
-                <div className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-2.5 flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="bg-[#1c1c28] rounded-2xl rounded-bl-md px-3.5 py-2.5 flex items-center gap-2 text-sm text-[#727280]">
                   <IconLoader2 size={14} className="animate-spin" />
                   Denkt nach...
                 </div>
@@ -517,17 +500,17 @@ export default function ChatWidget() {
                 {(() => {
                   const ft = getFileTypeInfo(image);
                   return ft ? (
-                    <div className="h-16 px-4 rounded-lg border border-border bg-muted flex items-center gap-2">
+                    <div className="h-16 px-4 rounded-lg border border-[#2a2a35] bg-[#2a2a35] flex items-center gap-2">
                       <ft.Icon size={24} className={`${ft.color} shrink-0`} />
-                      <span className="text-xs font-medium truncate max-w-[200px]">{fileName || ft.label}</span>
+                      <span className="text-xs font-medium truncate max-w-[200px] text-[#e8e8f0]">{fileName || ft.label}</span>
                     </div>
                   ) : (
-                    <img src={image} alt="" className="h-16 rounded-lg border border-border" />
+                    <img src={image} alt="" className="h-16 rounded-lg border border-[#2a2a35]" />
                   );
                 })()}
                 <button
                   onClick={() => { setImage(null); setFileName(null); }}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center"
                 >
                   <IconX size={10} />
                 </button>
@@ -536,11 +519,11 @@ export default function ChatWidget() {
           )}
 
           {/* Input */}
-          <div className="px-2.5 py-2 border-t border-border bg-card safe-area-pb">
+          <div className="px-2.5 py-2 border-t border-[#2a2a35] bg-[#1a1a24] safe-area-pb">
             <div className="flex items-end gap-1.5">
               <button
                 onClick={() => fileRef.current?.click()}
-                className="shrink-0 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="shrink-0 p-2 rounded-lg text-[#727280] hover:text-[#e8e8f0] hover:bg-[#2a2a35] transition-colors"
                 title="Datei anhängen"
               >
                 <IconPaperclip size={16} />
@@ -560,12 +543,12 @@ export default function ChatWidget() {
                 placeholder="Frage stellen oder Bild hochladen..."
                 rows={1}
                 style={{ fieldSizing: 'content', maxHeight: '4.5rem' } as React.CSSProperties}
-                className="flex-1 resize-none bg-muted rounded-xl px-3 py-2 text-base sm:text-sm outline-none border-0 placeholder:text-muted-foreground/60 overflow-y-auto"
+                className="flex-1 resize-none bg-[#2a2a35] text-[#e8e8f0] rounded-xl px-3 py-2 text-base sm:text-sm outline-none border-0 placeholder:text-[#727280]/80 overflow-y-auto"
               />
               <button
                 onClick={handleSend}
                 disabled={chatLoading || (!input.trim() && !image)}
-                className="shrink-0 p-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors"
+                className="shrink-0 p-2 rounded-lg bg-[#ff8fa8] text-[#12121a] disabled:opacity-40 hover:bg-[#ff8fa8]/90 transition-colors"
               >
                 <IconSend size={16} />
               </button>
